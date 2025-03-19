@@ -1,0 +1,8 @@
+node_modules/
+.next/
+.vscode/
+Lib/
+__pycache__/
+*.pyc
+share/
+logs/

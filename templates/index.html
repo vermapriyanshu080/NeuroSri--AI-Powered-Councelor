@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+        .typing-indicator {
+            display: none;
+        }
+        .emotion-badge {
+            font-size: 0.8em;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background-color: #e5e7eb;
+            margin-left: 8px;
+        }
+        .error-message {
+            color: #ef4444;
+            font-size: 0.8em;
+            margin-top: 4px;
+        }
+        .confidence-bar {
+            height: 4px;
+            background-color: #e5e7eb;
+            border-radius: 2px;
+            margin-top: 4px;
+        }
+        .confidence-level {
+            height: 100%;
+            background-color: #3b82f6;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto max-w-4xl p-4">
+        <div class="chat-container bg-white rounded-lg shadow p-4 mb-4">
+            <div id="messages">
+                {% for message in messages %}
+                    <div class="mb-4 {% if message.role == 'user' %}text-right{% endif %}">
+                        <div class="inline-block p-3 rounded-lg {% if message.role == 'user' %}bg-blue-600 text-white{% else %}bg-gray-100{% endif %}">
+                            {{ message.content }}
+                            {% if message.metadata and message.metadata.emotion %}
+                                <span class="emotion-badge">{{ message.metadata.emotion }}</span>
+                                <div class="confidence-bar">
+                                    <div class="confidence-level" style="width: {{ message.metadata.confidence * 100 }}%"></div>
+                                </div>
+                            {% endif %}
+                            {% if message.metadata and message.metadata.error %}
+                                <div class="error-message">{{ message.metadata.error }}</div>
+                            {% endif %}
+                            <div class="text-xs opacity-70 mt-1">{{ message.timestamp }}</div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="typing-indicator text-gray-500 italic">AI is thinking...</div>
+        </div>
+        
+        <div class="fixed bottom-0 left-0 right-0 bg-white p-4">
+            <div class="container mx-auto max-w-4xl">
+                <form id="message-form" class="flex gap-2">
+                    <input type="text" id="user-input" 
+                           class="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="Type your message...">
+                    <button type="submit" 
+                            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                        Send
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('message-form');
+        const input = document.getElementById('user-input');
+        const messagesDiv = document.getElementById('messages');
+        const typingIndicator = document.querySelector('.typing-indicator');
+
+        let currentEEGData = null;
+
+        function updateEEGData(data) {
+            currentEEGData = data;
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = input.value.trim();
+            if (!message) return;
+
+            // Add user message to UI
+            addMessage('user', message);
+            input.value = '';
+
+            // Show typing indicator
+            typingIndicator.style.display = 'block';
+
+            try {
+                const response = await fetch('/send_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        message: message,
+                        eeg_data: currentEEGData  // Include EEG data in the request
+                    }),
+                });
+
+                const data = await response.json();
+                
+                // Hide typing indicator
+                typingIndicator.style.display = 'none';
+
+                // Add AI response to UI
+                addMessage('assistant', data.response, data.metadata);
+
+            } catch (error) {
+                console.error('Error:', error);
+                typingIndicator.style.display = 'none';
+            }
+        });
+
+        function addMessage(role, content, metadata = null) {
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `mb-4 ${role === 'user' ? 'text-right' : ''}`;
+            
+            let metadataHtml = '';
+            if (metadata && metadata.emotion) {
+                metadataHtml = `
+                    <span class="emotion-badge">${metadata.emotion}</span>
+                    <div class="confidence-bar">
+                        <div class="confidence-level" style="width: ${metadata.confidence * 100}%"></div>
+                    </div>
+                `;
+            }
+            if (metadata && metadata.error) {
+                metadataHtml += `<div class="error-message">${metadata.error}</div>`;
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="inline-block p-3 rounded-lg ${role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100'}">
+                    ${content}
+                    ${metadataHtml}
+                    <div class="text-xs opacity-70 mt-1">${timestamp}</div>
+                </div>
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html> 
