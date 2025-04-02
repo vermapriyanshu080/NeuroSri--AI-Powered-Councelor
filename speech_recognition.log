@@ -1,0 +1,8 @@
+2025-04-03 03:05:52,963 - INFO - speech - Processing user input message: 'hello...'
+2025-04-03 03:05:52,970 - DEBUG - speech - Chatbot response for wake word analysis: 'I apologize, but I'm having trouble processing you...'
+2025-04-03 03:06:01,094 - INFO - speech - Processing user input message: 'hello...'
+2025-04-03 03:06:01,099 - DEBUG - speech - Chatbot response for wake word analysis: 'I apologize, but I'm having trouble processing you...'
+2025-04-03 03:08:02,700 - INFO - speech - Processing user input message: 'I am feeling very sad...'
+2025-04-03 03:08:02,704 - DEBUG - speech - Chatbot response for wake word analysis: 'I apologize, but I'm having trouble processing you...'
+2025-04-03 03:08:18,057 - INFO - speech - Processing user input message: 'I am very sad today...'
+2025-04-03 03:08:18,061 - DEBUG - speech - Chatbot response for wake word analysis: 'I apologize, but I'm having trouble processing you...'

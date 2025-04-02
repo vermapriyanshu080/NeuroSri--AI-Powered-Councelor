@@ -81,7 +81,7 @@ const processSpeechQueue = () => {
     const utterance = speechQueue[0];
     
     try {
-        speechSynthesis.speak(utterance);
+    speechSynthesis.speak(utterance);
     } catch (error) {
         console.error('Error in speech synthesis:', error);
         // Move to the next item if this one fails
@@ -622,8 +622,8 @@ function ChatWindow({ currentEmotion, emotionData }) {
         } else {
             // Start voice recognition immediately - remove previous delay
             try {
-                recognition.start();
-                setIsListening(true);
+            recognition.start();
+            setIsListening(true);
                 
                 toast({
                     title: `${currentLanguage.name} Voice Input Active`,
