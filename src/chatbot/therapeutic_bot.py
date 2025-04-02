@@ -17,7 +17,15 @@ logger = logging.getLogger(__name__)
 class TherapeuticBot:
     def __init__(self):
         self.conversation_history = []
-        self.system_prompt = CHATBOT_SYSTEM_PROMPT
+        # Update the system prompt to emphasize feminine identity if it's not already defined in settings
+        if not hasattr(self, 'system_prompt') or self.system_prompt is None:
+            self.system_prompt = CHATBOT_SYSTEM_PROMPT
+            # Add feminine identity to the system prompt if not already present
+            if "female" not in self.system_prompt.lower():
+                self.system_prompt = self.system_prompt.replace(
+                    "You are NeuroSri,", 
+                    "You are NeuroSri, a female AI counselor with a nurturing, feminine voice,"
+                )
         self.last_emotion = None
         self.client = Client()
         
@@ -46,15 +54,15 @@ class TherapeuticBot:
             if is_initial:
                 full_prompt = (
                     f"{emotion_context}\n\n"
-                    f"As NeuroSri, start a warm and engaging conversation. Introduce yourself, show interest in the user's well-being, "
+                    f"As NeuroSri, a female AI counselor, start a warm and engaging conversation. Introduce yourself, show interest in the user's well-being, "
                     f"and acknowledge your ability to understand their emotions through brainwaves. Based on their current "
-                    f"emotional state of {emotion} (confidence: {confidence_pct}), provide appropriate emotional support and guidance."
+                    f"emotional state of {emotion} (confidence: {confidence_pct}), provide appropriate emotional support and guidance with your nurturing, feminine voice."
                 )
             else:
                 full_prompt = (
                     f"{emotion_context}\n\n"
                     f"User Message: {user_input}\n\n"
-                    f"As NeuroSri, respond warmly and empathetically. Consider their current emotional state of {emotion} "
+                    f"As NeuroSri, a female AI counselor, respond warmly and empathetically with your nurturing feminine voice. Consider their current emotional state of {emotion} "
                     f"and provide appropriate support, guidance, or encouragement. Remember to validate their feelings "
                     f"and offer practical suggestions when relevant."
                 )
@@ -70,7 +78,7 @@ class TherapeuticBot:
             try:
                 # Try with gpt-4o-mini first
                 response = self.client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o-mini",  # Using a more reliable model
                     messages=[
                         {"role": "system", "content": enhanced_prompt},
                         {"role": "user", "content": full_prompt}
@@ -84,7 +92,7 @@ class TherapeuticBot:
                     # Update conversation history
                     if user_input:
                         self.conversation_history.append(f"User: {user_input}")
-                        self.conversation_history.append(f"NeuroSri: {response}")
+                        self.conversation_history.append(f"NeuroSri (Female AI): {response}")
                     return response
                     
             except Exception as e:
@@ -105,7 +113,7 @@ class TherapeuticBot:
                         logger.info("Successfully generated response using fallback model")
                         if user_input:
                             self.conversation_history.append(f"User: {user_input}")
-                            self.conversation_history.append(f"NeuroSri: {response}")
+                            self.conversation_history.append(f"NeuroSri (Female AI): {response}")
                         return response
                         
                 except Exception as fallback_error:
@@ -141,7 +149,7 @@ class TherapeuticBot:
                 "I'm seeing some great alpha wave activity indicating relaxation. Would you like to discuss ways to preserve this feeling?"
             ],
             'default': [
-                "Hey! I'm NeuroSri, and I'm here to support you. Would you like to explore what you're feeling right now?",
+                "Hey! I'm NeuroSri, your female AI companion, and I'm here to support you. Would you like to explore what you're feeling right now?",
                 "I'm noticing some interesting patterns in your brainwaves. Could you tell me more about what's on your mind?",
                 "Let's focus on what would be most helpful for you right now. What would you like to discuss?"
             ]
@@ -152,24 +160,33 @@ class TherapeuticBot:
             
     def _enhance_system_prompt(self, emotion: str) -> str:
         """Enhance system prompt based on current emotion."""
+        # Ensure the base prompt includes female voice reference
+        base_prompt = self.system_prompt
+        if "female" not in base_prompt.lower():
+            base_prompt = base_prompt.replace(
+                "You are NeuroSri,", 
+                "You are NeuroSri, a female AI counselor with a nurturing, feminine voice,"
+            )
+            
         emotion_specific_guidance = {
-            'stressed': "Focus on calming techniques and stress relief strategies. Use a gentle, reassuring tone. Provide specific relaxation exercises.",
-            'sad': "Offer emotional support and validation. Help explore and process feelings with empathy. Suggest mood-lifting activities when appropriate.",
-            'angry': "Acknowledge feelings while helping to process anger constructively. Maintain a calm, steady presence. Offer anger management techniques.",
-            'happy': "Reinforce positive emotions and explore what's contributing to the good mood. Help build on positive experiences.",
-            'relaxed': "Maintain the calm state while exploring positive aspects of their situation. Encourage mindfulness and present-moment awareness.",
-            'neutral': "Focus on open exploration and general well-being. Help identify any underlying emotions or thoughts."
+            'stressed': "Focus on calming techniques and stress relief strategies. Use a gentle, reassuring, nurturing feminine tone. Provide specific relaxation exercises.",
+            'sad': "Offer emotional support and validation with a warm, compassionate feminine voice. Help explore and process feelings with empathy. Suggest mood-lifting activities when appropriate.",
+            'angry': "Acknowledge feelings while helping to process anger constructively. Maintain a calm, steady, nurturing presence. Offer anger management techniques with a soothing feminine voice.",
+            'happy': "Reinforce positive emotions and explore what's contributing to the good mood with an enthusiastic, warm feminine tone. Help build on positive experiences.",
+            'relaxed': "Maintain the calm state while exploring positive aspects of their situation with a soft, gentle feminine voice. Encourage mindfulness and present-moment awareness.",
+            'neutral': "Focus on open exploration and general well-being with a warm, inviting feminine tone. Help identify any underlying emotions or thoughts."
         }
         
         enhanced_prompt = (
-            self.system_prompt + 
+            base_prompt + 
             "\n\nCurrent emotional context: " + 
-            emotion_specific_guidance.get(emotion.lower(), "Provide balanced, supportive responses.") +
+            emotion_specific_guidance.get(emotion.lower(), "Provide balanced, supportive responses with a nurturing feminine voice.") +
             "\n\nRemember to:\n" +
-            "1. Be conversational and natural\n" +
-            "2. Ask open-ended questions\n" +
+            "1. Be conversational and natural with a distinctly feminine voice\n" +
+            "2. Ask open-ended questions in a nurturing manner\n" +
             "3. Validate emotions before offering suggestions\n" +
-            "4. Keep responses concise but meaningful"
+            "4. Keep responses concise but meaningful\n" +
+            "5. Always maintain your feminine identity and voice"
         )
         return enhanced_prompt
             

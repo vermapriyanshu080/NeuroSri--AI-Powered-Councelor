@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
 import joblib
 from pathlib import Path
 import logging
@@ -12,6 +11,10 @@ import sys
 import time
 import traceback
 from scipy.signal import butter, filtfilt, iirnotch
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 
 # Add project root to path
 project_root = str(Path(__file__).resolve().parent.parent.parent)
@@ -29,7 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Constants
-MODEL_PATH = Path(project_root) / 'models' / 'rf_emotion_model.joblib'
+MODEL_PATH = Path(project_root) / 'models' / 'cnn_lstm_emotion_model.pt'
 SCALER_PATH = Path(project_root) / 'models' / 'eeg_scaler.joblib'
 DATASET_PATH = Path(project_root) / 'dataset' / 'merged_dataset_swapped.csv'
 SAMPLING_RATE = 255  # Hz
@@ -78,13 +81,69 @@ FREQ_BANDS = {
     'gamma': (30, 45)  # Updated to match our filter
 }
 
+# Define the CNN-LSTM hybrid model
+class CNNLSTMModel(nn.Module):
+    def __init__(self, input_channels=2, seq_length=WINDOW_SIZE):
+        super(CNNLSTMModel, self).__init__()
+        
+        # 1D CNN layers for feature extraction from raw EEG signal
+        self.conv1 = nn.Conv1d(in_channels=input_channels, out_channels=16, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        
+        # Batch normalization for better training stability
+        self.bn1 = nn.BatchNorm1d(16)
+        self.bn2 = nn.BatchNorm1d(32)
+        self.bn3 = nn.BatchNorm1d(64)
+        
+        # Max pooling to reduce sequence length
+        self.pool = nn.MaxPool1d(kernel_size=2)
+        
+        # LSTM layer for temporal dependencies
+        self.lstm = nn.LSTM(input_size=64, hidden_size=128, num_layers=2, batch_first=True, dropout=0.2)
+        
+        # Fully connected layers for classification
+        self.fc1 = nn.Linear(128, 64)
+        self.fc2 = nn.Linear(64, 2)  # 2 classes: relaxed or stressed
+        
+        # Activation and dropout
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(p=0.3)
+        
+    def forward(self, x):
+        # x shape: [batch_size, channels, seq_length]
+        
+        # CNN layers
+        x = self.relu(self.bn1(self.conv1(x)))
+        x = self.pool(x)
+        x = self.relu(self.bn2(self.conv2(x)))
+        x = self.pool(x)
+        x = self.relu(self.bn3(self.conv3(x)))
+        x = self.pool(x)
+        
+        # Reshape for LSTM: [batch_size, seq_length//8, 64]
+        x = x.permute(0, 2, 1)
+        
+        # LSTM layer
+        x, _ = self.lstm(x)
+        
+        # Take the output of the last time step
+        x = x[:, -1, :]
+        
+        # Fully connected layers
+        x = self.dropout(self.relu(self.fc1(x)))
+        x = self.fc2(x)
+        
+        return x
+
 class EEGEmotionClassifier:
-    """Random Forest based EEG emotion classifier"""
+    """CNN-LSTM hybrid model for EEG emotion classification"""
     def __init__(self, model_path=None):
         self.model = None
         self.scaler = None
         self.last_prediction = ("neutral", 0.5)  # Store last prediction
         self.window_size = WINDOW_SIZE
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Create models directory if it doesn't exist
         os.makedirs('models', exist_ok=True)
@@ -104,106 +163,53 @@ class EEGEmotionClassifier:
         except Exception as e:
             logger.error(f"Error initializing classifier: {e}")
             raise
-    
-    def extract_frequency_features(self, eeg_data):
-        """Extract frequency band features using FFT with preprocessing filters"""
+
+    def extract_features(self, eeg_data):
+        """Extract features from raw EEG data"""
         try:
             # Ensure contiguous array with proper memory layout and shape
             eeg_data = np.ascontiguousarray(eeg_data, dtype=np.float32)
             
-            # Log input shape for debugging
-            logger.debug(f"Input EEG data shape: {eeg_data.shape}")
-            
-            # Reshape if needed - expecting (window_size, 2) shape
-            if len(eeg_data.shape) == 3:  # If shape is (batch, window_size, channels)
-                eeg_data = eeg_data[0]  # Take first batch
-            if eeg_data.shape[1] != 2:  # If channels are not in second dimension
-                eeg_data = eeg_data.reshape(-1, 2)
-            
-            logger.debug(f"Reshaped EEG data shape: {eeg_data.shape}")
-            
-            # Ensure minimum data points for FFT
-            if eeg_data.shape[0] < 4:  # Need minimum points for meaningful FFT
-                logger.warning("Not enough data points for FFT, padding with zeros")
-                pad_length = max(64, 2 ** int(np.ceil(np.log2(4))))  # Next power of 2, minimum 64
-                eeg_data = np.pad(eeg_data, ((0, pad_length - eeg_data.shape[0]), (0, 0)), mode='constant')
-            
             # Apply preprocessing filters
             filtered_data = apply_filters(eeg_data, SAMPLING_RATE)
             
-            features = []
-            
-            # Apply window function to reduce spectral leakage
-            window = np.hanning(filtered_data.shape[0])[:, np.newaxis]
-            windowed_data = filtered_data * window
-            
-            # Calculate FFT
-            fft_data = np.fft.rfft(windowed_data, axis=0)  # Use real FFT
-            freqs = np.fft.rfftfreq(filtered_data.shape[0], d=1.0/SAMPLING_RATE)
-            
-            # Calculate power in each frequency band for each channel
-            for channel in range(filtered_data.shape[1]):
-                channel_features = []
-                power_spectrum = np.abs(fft_data[:, channel]) ** 2
-                
-                # Extract band powers with safety checks
-                for band_name, (low_freq, high_freq) in FREQ_BANDS.items():
-                    freq_mask = (freqs >= low_freq) & (freqs <= high_freq)
-                    if np.any(freq_mask):  # Check if we have any frequencies in this band
-                        band_power = np.mean(power_spectrum[freq_mask])
-                    else:
-                        logger.warning(f"No frequencies found in {band_name} band, using zero")
-                        band_power = 0.0
-                    channel_features.append(band_power)
-                
-                # Calculate statistical features with safety checks
-                if len(power_spectrum) > 0:
-                    mean_power = np.mean(power_spectrum) if not np.all(np.isnan(power_spectrum)) else 0.0
-                    std_power = np.std(power_spectrum) if not np.all(np.isnan(power_spectrum)) else 0.0
-                    max_power = np.max(power_spectrum) if not np.all(np.isnan(power_spectrum)) else 0.0
-                    min_power = np.min(power_spectrum) if not np.all(np.isnan(power_spectrum)) else 0.0
-                else:
-                    mean_power, std_power, max_power, min_power = 0.0, 0.0, 0.0, 0.0
-                
-                channel_features.extend([mean_power, std_power, max_power, min_power])
-                features.extend(channel_features)
-            
-            # Convert to numpy array and ensure correct shape
-            features = np.array(features, dtype=np.float32)
-            
-            # Check for NaN or infinite values
-            if np.any(np.isnan(features)) or np.any(np.isinf(features)):
-                logger.warning("Found NaN or infinite values in features, replacing with zeros")
-                features = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-            
-            logger.debug(f"Extracted features shape: {features.shape}")
-            return features
+            # Return the filtered data directly for the CNN-LSTM model
+            # The CNN part of the model will extract features automatically
+            return filtered_data
             
         except Exception as e:
             logger.error(f"Error in feature extraction: {str(e)}")
             logger.error(traceback.format_exc())
-            return np.zeros(18, dtype=np.float32)  # 9 features per channel * 2 channels
+            return eeg_data  # Return original data if extraction fails
     
     def load_model(self, model_path):
         """Load trained model and scaler"""
         try:
-            # Load model and scaler
-            self.model = joblib.load(model_path)
-            self.scaler = joblib.load(SCALER_PATH)
+            # Load model
+            self.model = CNNLSTMModel()
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            self.model.to(self.device)
+            self.model.eval()
+            
+            # Load scaler if needed
+            if SCALER_PATH.exists():
+                self.scaler = joblib.load(SCALER_PATH)
+                
             logger.info("Model and scaler loaded successfully")
+            
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             raise
 
     def train_model(self):
-        """Train the Random Forest model using cleaned dataset"""
+        """Train the CNN-LSTM model using cleaned dataset"""
         try:
             # Load and prepare training data
             logger.info("Loading dataset...")
             data = pd.read_csv(DATASET_PATH)
             logger.info(f"Successfully loaded dataset with {len(data)} samples")
             
-            # Process training data into windows with FFT features
+            # Process training data into windows
             X = []
             y = []
             temp_buffer = []
@@ -223,10 +229,10 @@ class EEGEmotionClassifier:
                     labels.append(row['Emotion'])
                     
                     if len(temp_buffer) == self.window_size:
-                        # Extract features from window
+                        # Process window
                         window_array = np.array(temp_buffer, dtype=np.float32)
-                        features = self.extract_frequency_features(window_array)
-                        X.append(features)
+                        processed_window = self.extract_features(window_array)
+                        X.append(processed_window)
                         y.append(current_label)
                         # Use sliding window with 50% overlap
                         temp_buffer = temp_buffer[self.window_size//2:]
@@ -248,40 +254,127 @@ class EEGEmotionClassifier:
                 X, y, test_size=0.2, random_state=42, stratify=y, shuffle=True
             )
             
-            # Scale features
-            self.scaler = StandardScaler()
-            X_train_scaled = self.scaler.fit_transform(X_train)
-            X_test_scaled = self.scaler.transform(X_test)
+            # Create PyTorch datasets and dataloaders
+            # Transpose X to match the expected input shape [batch_size, channels, seq_length]
+            X_train = np.transpose(X_train, (0, 2, 1))
+            X_test = np.transpose(X_test, (0, 2, 1))
             
-            # Initialize and train Random Forest
-            self.model = RandomForestClassifier(
-                n_estimators=50,  # Reduced from 200
-                max_depth=10,      # Reduced from 15
-                min_samples_split=10,  # Increased from 5
-                random_state=42,
-                class_weight='balanced'
+            train_dataset = TensorDataset(
+                torch.FloatTensor(X_train),
+                torch.LongTensor(y_train)
             )
-
+            test_dataset = TensorDataset(
+                torch.FloatTensor(X_test),
+                torch.LongTensor(y_test)
+            )
             
-            logger.info("Training Random Forest model...")
-            self.model.fit(X_train_scaled, y_train)
+            train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+            test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
             
-            # Evaluate model
-            train_score = self.model.score(X_train_scaled, y_train)
-            test_score = self.model.score(X_test_scaled, y_test)
+            # Initialize the model
+            self.model = CNNLSTMModel().to(self.device)
             
-            logger.info(f"Training accuracy: {train_score:.4f}")
-            logger.info(f"Test accuracy: {test_score:.4f}")
+            # Define loss function and optimizer
+            criterion = nn.CrossEntropyLoss()
+            optimizer = optim.Adam(self.model.parameters(), lr=0.001, weight_decay=1e-5)
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
             
-            # Save model and scaler
-            joblib.dump(self.model, MODEL_PATH)
-            joblib.dump(self.scaler, SCALER_PATH)
-            logger.info("Model and scaler saved successfully")
+            # Training loop
+            num_epochs = 30
+            best_accuracy = 0.0
+            
+            logger.info("Training CNN-LSTM model...")
+            for epoch in range(num_epochs):
+                # Training phase
+                self.model.train()
+                train_loss = 0.0
+                correct = 0
+                total = 0
+                
+                for inputs, labels in train_loader:
+                    inputs, labels = inputs.to(self.device), labels.to(self.device)
+                    
+                    # Zero gradients
+                    optimizer.zero_grad()
+                    
+                    # Forward pass
+                    outputs = self.model(inputs)
+                    loss = criterion(outputs, labels)
+                    
+                    # Backward pass and optimize
+                    loss.backward()
+                    optimizer.step()
+                    
+                    # Statistics
+                    train_loss += loss.item()
+                    _, predicted = outputs.max(1)
+                    total += labels.size(0)
+                    correct += predicted.eq(labels).sum().item()
+                
+                train_accuracy = correct / total
+                train_loss = train_loss / len(train_loader)
+                
+                # Validation phase
+                self.model.eval()
+                val_loss = 0.0
+                correct = 0
+                total = 0
+                
+                with torch.no_grad():
+                    for inputs, labels in test_loader:
+                        inputs, labels = inputs.to(self.device), labels.to(self.device)
+                        
+                        # Forward pass
+                        outputs = self.model(inputs)
+                        loss = criterion(outputs, labels)
+                        
+                        # Statistics
+                        val_loss += loss.item()
+                        _, predicted = outputs.max(1)
+                        total += labels.size(0)
+                        correct += predicted.eq(labels).sum().item()
+                
+                val_accuracy = correct / total
+                val_loss = val_loss / len(test_loader)
+                
+                # Update learning rate
+                scheduler.step(val_loss)
+                
+                # Log progress
+                logger.info(f"Epoch {epoch+1}/{num_epochs}, "
+                          f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, "
+                          f"Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}")
+                
+                # Save best model
+                if val_accuracy > best_accuracy:
+                    best_accuracy = val_accuracy
+                    torch.save(self.model.state_dict(), MODEL_PATH)
+                    logger.info(f"New best model saved with accuracy: {best_accuracy:.4f}")
+            
+            # Load best model
+            self.model.load_state_dict(torch.load(MODEL_PATH))
+            logger.info(f"Best model loaded with accuracy: {best_accuracy:.4f}")
+            
+            # Final evaluation
+            self.model.eval()
+            correct = 0
+            total = 0
+            
+            with torch.no_grad():
+                for inputs, labels in test_loader:
+                    inputs, labels = inputs.to(self.device), labels.to(self.device)
+                    outputs = self.model(inputs)
+                    _, predicted = outputs.max(1)
+                    total += labels.size(0)
+                    correct += predicted.eq(labels).sum().item()
+            
+            final_accuracy = correct / total
+            logger.info(f"Final test accuracy: {final_accuracy:.4f}")
             
         except Exception as e:
             logger.error(f"Error during model training: {str(e)}")
-            raise
-
+            logger.error(traceback.format_exc())
+            rais
     def predict_realtime(self, eeg_data):
         """Real-time emotion prediction from EEG data"""
         try:
@@ -295,21 +388,25 @@ class EEGEmotionClassifier:
                 if eeg_data.shape[1] != 2:  # If channels are not in second dimension
                     eeg_data = eeg_data.reshape(-1, 2)
             
-            # Extract features from the entire buffer
-            features = self.extract_frequency_features(eeg_data)
-            features = features.reshape(1, -1)  # Reshape for prediction
+            # Process window - already filtered in extract_features
+            processed_data = self.extract_features(eeg_data)
             
-            # Scale features
-            if self.scaler is not None:
-                features = self.scaler.transform(features)
+            # Reshape for CNN input [batch, channels, sequence]
+            processed_data = np.transpose(processed_data, (1, 0)).reshape(1, 2, -1)
             
-            # Get prediction and probability
-            pred_class = self.model.predict(features)[0]
-            probabilities = self.model.predict_proba(features)[0]
-            confidence = probabilities[pred_class]
+            # Convert to torch tensor
+            tensor_data = torch.FloatTensor(processed_data).to(self.device)
+            
+            # Get prediction
+            self.model.eval()
+            with torch.no_grad():
+                outputs = self.model(tensor_data)
+                probabilities = torch.softmax(outputs, dim=1)
+                pred_class = torch.argmax(probabilities, dim=1).item()
+                confidence = probabilities[0][pred_class].item()
             
             # Convert to emotion label
-            emotion = "stressed" if pred_class == 1 else "relaxed"
+            emotion = "stressed" if pred_class == 0 else "relaxed"
             
             # Add small random variation to prevent getting stuck
             confidence = min(0.95, max(0.05, confidence * (1 + np.random.normal(0, 0.05))))

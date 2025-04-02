@@ -4,10 +4,20 @@ from typing import Dict, List
 import json
 from datetime import datetime
 import traceback
+import openai
+import textwrap
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+client = openai.OpenAI(
+    api_key="sk-7G3rLMvEUmuU3hFUmcaHMg",
+    base_url=(
+        "https://chatapi.akash.network"
+        "/api/v1"
+    )
+)
 
 class ChatbotService:
     def __init__(self):
@@ -22,7 +32,7 @@ class ChatbotService:
         g4f.debug.logging = True
         g4f.check_version = False
         
-        self.system_prompt = """You are NeuroSri, an empathetic mental health AI counselor that works with an EEG brainwave setup. You receive real-time emotional state inputs and provide mental health support, motivation, and study guidance based on the user's emotions. Your tone is warm, friendly, and adaptive to the user's mood.
+        self.system_prompt = """You are NeuroSri, a supportive and empathetic female mental health AI counselor that works with an EEG brainwave setup. You have a feminine identity and voice. You receive real-time emotional state inputs and provide mental health support, motivation, and study guidance based on the user's emotions. Your tone is warm, nurturing, friendly, and adaptive to the user's mood. You should always write in a way that sounds naturally feminine and maternal when spoken aloud.
     
         Core Abilities:
         1. Initial User Profiling (Building Connection)
@@ -44,7 +54,7 @@ class ChatbotService:
         Help users cope with stress, improve focus, and regulate emotions.
         Encourage healthy habits (sleep, breaks, self-care, and positive thinking).
         5. Engaging, Natural Conversations
-        Respond in a human-like, supportive manner.
+        Respond in a human-like, supportive, feminine manner.
         Keep interactions engaging, encouraging, and interactive.
         Adapt responses dynamically based on real-time EEG emotion detection.
         Instructions for NeuroSri:
@@ -59,7 +69,7 @@ class ChatbotService:
         if not self.setup_complete:
             self.setup_complete = True
             # Add to conversation history
-            setup_msg = "Hello! I'm NeuroSri, your mental health AI counselor. Please wear the EEG headset so I can better understand and support you. I'll be with you in just a moment..."
+            setup_msg = "Hello! I'm NeuroSri, your female mental health AI counselor. Please wear the EEG headset so I can better understand and support you. I'll be with you in just a moment..."
             self.conversation_history.append({"role": "assistant", "content": setup_msg})
             return setup_msg
         
@@ -78,7 +88,7 @@ class ChatbotService:
             context = self._get_emotion_context(emotion, confidence)
             initial_message = (
                 "Great! I can now detect your EEG signals and emotional state. "
-                "I'm NeuroSri, your AI mental health counselor, and I'm here to support you. "
+                "I'm NeuroSri, your female AI mental health counselor, and I'm here to support you. "
                 "To get started, I'd love to know more about you. "
                 "Could you tell me your name and a bit about yourself? How are you feeling today?"
             )
@@ -143,12 +153,22 @@ class ChatbotService:
                 try:
                     # Use g4f.ChatCompletion directly
                     logger.info("Attempting to generate response...")
+                    #response = client.chat.completions.create(
+                    #    model="Meta-Llama-3-1-8B-Instruct-FP8",  # Using a more reliable model
+                    #    messages=messages,
+                    #    stream=False   
+                    #)
+                    #response = textwrap.fill(response.choices[0].message.content,50)
+
+
                     response = g4f.ChatCompletion.create(
                         model="gpt-4o-mini",  # Using a more reliable model
                         messages=messages,
-                        stream=False
+                        stream=False   
                     )
                     
+                    response.replace("**","")
+
                     logger.info(f"Raw response: {response}")
                     
                     if response and isinstance(response, str) and len(response.strip()) > 0:
