@@ -1,0 +1,8 @@
+User Profile Information:
+- Name: Abhinav Gupta
+- Age: 19
+- Gender: male
+- Main concern: hosting a 24hr hackathon as al ead organizer
+- Previous therapy experience: no
+- Sleep quality: poor
+- Neurological history: headaches

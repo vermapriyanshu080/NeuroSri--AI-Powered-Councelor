@@ -86,25 +86,20 @@ class CNNLSTMModel(nn.Module):
     def __init__(self, input_channels=2, seq_length=WINDOW_SIZE):
         super(CNNLSTMModel, self).__init__()
         
-        # 1D CNN layers for feature extraction from raw EEG signal
         self.conv1 = nn.Conv1d(in_channels=input_channels, out_channels=16, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, padding=1)
         self.conv3 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
         
-        # Batch normalization for better training stability
         self.bn1 = nn.BatchNorm1d(16)
         self.bn2 = nn.BatchNorm1d(32)
         self.bn3 = nn.BatchNorm1d(64)
         
-        # Max pooling to reduce sequence length
         self.pool = nn.MaxPool1d(kernel_size=2)
         
-        # LSTM layer for temporal dependencies
         self.lstm = nn.LSTM(input_size=64, hidden_size=128, num_layers=2, batch_first=True, dropout=0.2)
         
-        # Fully connected layers for classification
         self.fc1 = nn.Linear(128, 64)
-        self.fc2 = nn.Linear(64, 2)  # 2 classes: relaxed or stressed
+        self.fc2 = nn.Linear(64, 2) 
         
         # Activation and dropout
         self.relu = nn.ReLU()

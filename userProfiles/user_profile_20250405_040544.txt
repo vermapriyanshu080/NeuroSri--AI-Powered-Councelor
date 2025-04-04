@@ -1,0 +1,7 @@
+User Profile Information:
+- Name: vidhi rawat
+- Age: 20
+- Gender: female
+- Main concern: testing
+- Previous therapy experience: no
+- Sleep quality: fair

@@ -1,0 +1,8 @@
+User Profile Information:
+- Name: Anshu Tiwari
+- Age: 35
+- Gender: male
+- Main concern: here to see innovative ideas
+- Previous therapy experience: no
+- Sleep quality: excellent
+- Current medications: None

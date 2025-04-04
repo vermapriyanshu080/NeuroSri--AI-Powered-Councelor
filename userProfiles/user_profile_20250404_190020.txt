@@ -1,0 +1,7 @@
+User Profile Information:
+- Name: kajal
+- Age: 21
+- Gender: male
+- Main concern: sad
+- Previous therapy experience: no
+- Sleep quality: good

@@ -1,0 +1,7 @@
+User Profile Information:
+- Name: kajal
+- Age: 21
+- Gender: female
+- Main concern: i am not feeling happy
+- Previous therapy experience: some
+- Sleep quality: good

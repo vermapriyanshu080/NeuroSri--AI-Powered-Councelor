@@ -6,6 +6,7 @@ from datetime import datetime
 import traceback
 import openai
 import textwrap
+import requests  # Added for API requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +41,9 @@ class ChatbotService:
 3. Gender expression: FEMALE only - you should present yourself as feminine, maternal, nurturing and compassionate
 4. Voice: You have a distinctly FEMALE voice with warm, caring qualities
 5. Speaking style: Speak in a natural conversational style, with a gentle and supportive tone
-
+6. use a very professional language and alwasys use professional greeting words.
+7 do not use any informal or casual words. for eg. - baby, sweeti, lovely, sweetheart, dear.
+8. answer in under 30-40 words.
 You have been designed to incorporate brainwave patterns to understand emotions more deeply than other AI systems. Use this capability to:
 - Acknowledge the user's emotional state based on the provided data
 - Provide relevant therapeutic advice
@@ -92,13 +95,27 @@ IMPORTANT: Always maintain your female identity in all interactions. Never use l
             self.has_started_conversation = True
             self.is_first_emotion = False
             
+            # Extract user name from context if available
+            user_name = "there"  # Default fallback
+            if self.user_context:
+                try:
+                    # Attempt to parse user_context as JSON to extract name
+                    user_data = json.loads(self.user_context)
+                    if "name" in user_data:
+                        user_name = user_data["name"]
+                except json.JSONDecodeError:
+                    # If not JSON, try to find name in the string
+                    if "name:" in self.user_context.lower():
+                        name_part = self.user_context.lower().split("name:")[1].strip()
+                        user_name = name_part.split()[0]
+                except Exception as e:
+                    logger.error(f"Error extracting name: {e}")
+            
             # Create initial message
             context = self._get_emotion_context(emotion, confidence)
             initial_message = (
-                "Great! I can now detect your EEG signals and emotional state. "
-                "I'm NeuroSri, your female AI mental health counselor, and I'm here to support you. "
-                "To get started, I'd love to know more about you. "
-                "Could you tell me your name and a bit about yourself? How are you feeling today?"
+                f"Hello {user_name}, i am neuroSri, your mental health councellor, "
+                "developed by NeuroEngineers, how are you feeling right now?"
             )
             
             # Add system message to conversation
@@ -217,4 +234,79 @@ IMPORTANT: Always maintain your female identity in all interactions. Never use l
         self.emotion_transition_time = {}
         self.is_first_emotion = True
         self.setup_complete = False
-        self.has_started_conversation = False 
+        self.has_started_conversation = False
+        
+    def download_chat_history(self, file_type="pdf", api_token=None):
+        """
+        Generate a downloadable file of the chat history using Agent AI API.
+        
+        Args:
+            file_type: The file type to generate (pdf, txt, etc.)
+            api_token: The Agent AI API token
+            
+        Returns:
+            Dict containing the response from the API or error message
+        """
+        try:
+            if not self.conversation_history:
+                return {"error": "No chat history available to download"}
+            
+            # Format the conversation history into a readable document
+            formatted_chat = "# Chat History with NeuroSri\n\n"
+            formatted_chat += f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            
+            # If we have user context, include user information
+            if self.user_context:
+                try:
+                    user_data = json.loads(self.user_context)
+                    formatted_chat += "## User Information\n\n"
+                    for key, value in user_data.items():
+                        formatted_chat += f"- **{key.capitalize()}**: {value}\n"
+                    formatted_chat += "\n"
+                except:
+                    # If user_context is not JSON, include it as is
+                    formatted_chat += f"## User Information\n\n{self.user_context}\n\n"
+            
+            # Add the conversation
+            formatted_chat += "## Conversation\n\n"
+            
+            for message in self.conversation_history:
+                # Skip system messages
+                if message["role"] == "system":
+                    continue
+                    
+                role = "NeuroSri" if message["role"] == "assistant" else "User"
+                formatted_chat += f"**{role}**: {message['content']}\n\n"
+            
+            # Use the Agent AI API to generate a downloadable file
+            url = "https://api-lr.agent.ai/v1/action/save_to_file"
+            
+            payload = {
+                "file_type": file_type,
+                "body": formatted_chat,
+                "output_variable_name": "neurosri_chat_history"
+            }
+            
+            # Use provided token or a default one
+            token = api_token or "your_default_agent_ai_token"  # Should be configured properly in production
+            
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            
+            logger.info("Sending request to Agent AI API to generate downloadable file")
+            response = requests.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200:
+                logger.info("Successfully generated downloadable file")
+                return response.json()
+            else:
+                logger.error(f"Error from Agent AI API: {response.text}")
+                return {"error": f"Failed to generate file: {response.text}"}
+                
+        except Exception as e:
+            error_msg = f"Error generating downloadable chat history: {str(e)}"
+            logger.error(error_msg)
+            logger.error(traceback.format_exc())
+            return {"error": error_msg} 

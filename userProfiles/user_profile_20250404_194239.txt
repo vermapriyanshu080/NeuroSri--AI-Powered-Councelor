@@ -1,0 +1,7 @@
+User Profile Information:
+- Name: suyash
+- Age: 21
+- Gender: male
+- Main concern: i am feeling sad.
+- Previous therapy experience: some
+- Sleep quality: poor

@@ -22,7 +22,7 @@ class TherapeuticBot:
         self.conversation_history = []
         # Update the system prompt to emphasize feminine identity if it's not already defined in settings
         if not hasattr(self, 'system_prompt') or self.system_prompt is None:
-        self.system_prompt = CHATBOT_SYSTEM_PROMPT
+            self.system_prompt = CHATBOT_SYSTEM_PROMPT
             # Add feminine identity to the system prompt if not already present
             if "female" not in self.system_prompt.lower():
                 self.system_prompt = self.system_prompt.replace(

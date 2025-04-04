@@ -427,12 +427,66 @@ def chat():
 def clear_chat():
     """API endpoint to clear chat history"""
     try:
-        if chatbot is not None:
-            chatbot.clear_history()
-        return jsonify({'status': 'success'})
+        # Ensure chatbot is initialized
+        if chatbot is None:
+            initialize_chatbot()
+        
+        # Clear history
+        chatbot.clear_history()
+        logger.info("Chat history cleared successfully")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Chat history cleared successfully'
+        })
+        
     except Exception as e:
         logger.error(f"Error clearing chat history: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'error': str(e),
+            'message': 'Failed to clear chat history'
+        }), 500
+
+@app.route('/api/chat/download', methods=['POST'])
+def download_chat_history():
+    """API endpoint to download chat history as a file using Agent AI API"""
+    try:
+        # Ensure chatbot is initialized
+        if chatbot is None:
+            initialize_chatbot()
+        
+        # Get parameters from request
+        data = request.get_json() or {}
+        file_type = data.get('file_type', 'pdf')
+        api_token = data.get('api_token')  # In production, this should be configured securely
+        
+        # Generate downloadable file
+        logger.info(f"Attempting to download chat history as {file_type}")
+        result = chatbot.download_chat_history(file_type=file_type, api_token=api_token)
+        
+        if "error" in result:
+            logger.error(f"Error downloading chat history: {result['error']}")
+            return jsonify({
+                'success': False,
+                'error': result['error']
+            }), 400
+        
+        logger.info("Chat history download successful")
+        return jsonify({
+            'success': True,
+            'data': result,
+            'message': 'Chat history downloaded successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error downloading chat history: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to download chat history'
+        }), 500
 
 # Add a new endpoint to get initial message
 @app.route('/api/chat/initial', methods=['GET'])

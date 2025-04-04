@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input" 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Brain, Send, User } from "lucide-react"
+import { Brain, Send, User, Download } from "lucide-react"
 
 export default function MentalHealthChatbot() {
   const [messages, setMessages] = useState<Array<{id: string, role: string, content: string}>>([])
@@ -14,6 +14,7 @@ export default function MentalHealthChatbot() {
     relaxed_confidence: 0,
     stressed_confidence: 0
   })
+  const [isDownloading, setIsDownloading] = useState(false)
   const ws = useRef<WebSocket | null>(null)
 
   // Connect to WebSocket for emotion updates
@@ -82,6 +83,39 @@ export default function MentalHealthChatbot() {
     }
   }
 
+  const handleDownloadChatHistory = async () => {
+    if (messages.length === 0) {
+      alert("No chat history to download.")
+      return
+    }
+
+    setIsDownloading(true)
+
+    try {
+      const response = await fetch('/api/chat/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file_type: 'pdf' })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success && data.data && data.data.url) {
+        // Open download URL in a new tab
+        window.open(data.data.url, '_blank')
+      } else {
+        alert(`Failed to download chat history: ${data.error || 'Unknown error'}`)
+      }
+    } catch (error) {
+      console.error('Error downloading chat history:', error)
+      alert('Error downloading chat history. Please try again.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col md:flex-row h-screen bg-background text-foreground">
       {/* Chat Interface */}
@@ -120,6 +154,14 @@ export default function MentalHealthChatbot() {
               />
               <Button type="submit" className="bg-primary text-primary-foreground hover:bg-accent">
                 <Send className="w-4 h-4" />
+              </Button>
+              <Button 
+                type="button" 
+                className="bg-secondary text-secondary-foreground hover:bg-accent"
+                onClick={handleDownloadChatHistory}
+                disabled={isDownloading || messages.length === 0}
+              >
+                <Download className="w-4 h-4" />
               </Button>
             </form>
           </CardFooter>

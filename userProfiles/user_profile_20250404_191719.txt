@@ -1,0 +1,7 @@
+User Profile Information:
+- Name: suyash
+- Age: 21
+- Gender: female
+- Main concern: i am not fefeling very good today, i feel a bit stressed.
+- Previous therapy experience: some
+- Sleep quality: fair
