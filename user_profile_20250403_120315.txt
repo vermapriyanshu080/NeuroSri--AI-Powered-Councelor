@@ -4,5 +4,5 @@ User Profile Information:
 - Gender: male
 - Main concern: i am sad
 - Previous therapy experience: some
-- Sleep quality: good
-- Neurological history: seizures
+- Sleep quality: goodd
+- Neurological history: seizures  
