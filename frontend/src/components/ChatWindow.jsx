@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import {
     Box,
     VStack,
@@ -11,9 +11,22 @@ import {
     HStack,
     IconButton,
     Tooltip,
-    Select
+    Select,
+    FormControl,
+    FormLabel,
+    NumberInput,
+    NumberInputField,
+    NumberInputStepper,
+    NumberIncrementStepper,
+    NumberDecrementStepper,
+    Textarea,
+    Heading,
+    Radio,
+    RadioGroup,
+    Stack,
+    Divider
 } from '@chakra-ui/react';
-import { FaMicrophone, FaStop, FaLanguage, FaVolumeMute } from 'react-icons/fa';
+import { FaMicrophone, FaStop, FaLanguage, FaVolumeMute, FaUser, FaPaperPlane } from 'react-icons/fa';
 import { api } from '../services/api';
 
 // Avatar paths for the profile pictures - images should be in the public/images folder
@@ -25,14 +38,14 @@ const LANGUAGES = {
     ENGLISH: {
         code: 'en-US',
         name: 'English',
-        rate: 1.50,     // Increased speed for faster speech (was 0.92)
+        rate: 1.30,     // Increased speed for faster speech (was 0.92)
         pitch: 1.0,    // Higher pitch for distinctly female voice
         voiceName: null // Will be set dynamically
     },
     HINDI: {
         code: 'hi-IN',
         name: 'Hindi',
-        rate: 1.10,     // Increased speed for faster speech (was 0.92)
+        rate: 1.30,     // Increased speed for faster speech (was 0.92)
         pitch: 1.0,    // Higher pitch for distinctly female voice
         voiceName: null // Will be set dynamically
     }
@@ -47,12 +60,12 @@ let isSpeaking = false;
 
 // Punctuation timings for more natural speech
 const PUNCTUATION_PAUSES = {
-    ',': 150,
-    '.': 300,
-    '!': 300,
-    '?': 400,
-    ';': 350,
-    ':': 300,
+    ',': 50,
+    '.': 150,
+    '!': 200,
+    '?': 200,
+    ';': 250,
+    ':': 200,
     '—': 400,
     '–': 400,
     '*': 0
@@ -449,6 +462,68 @@ if ('speechSynthesis' in window) {
     initializeVoices();
 }
 
+// Memoized component for text inputs that preserves focus
+const FocusPreservingInput = memo(({ value, onChange, placeholder, ...props }) => {
+    const inputRef = useRef(null);
+    
+    return (
+        <Input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => {
+                // Only update if value actually changed to prevent unnecessary re-renders
+                if (e.target.value !== value) {
+                    onChange(e);
+                }
+            }}
+            placeholder={placeholder}
+            onFocus={() => {
+                // Store the cursor position
+                const pos = inputRef.current?.selectionStart;
+                // Restore it after the state update
+                setTimeout(() => {
+                    if (inputRef.current) {
+                        inputRef.current.selectionStart = pos;
+                        inputRef.current.selectionEnd = pos;
+                    }
+                }, 0);
+            }}
+            {...props}
+        />
+    );
+});
+
+// Memoized component for textareas that preserves focus
+const FocusPreservingTextarea = memo(({ value, onChange, placeholder, ...props }) => {
+    const textareaRef = useRef(null);
+    
+    return (
+        <Textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => {
+                // Only update if value actually changed
+                if (e.target.value !== value) {
+                    onChange(e);
+                }
+            }}
+            placeholder={placeholder}
+            onFocus={() => {
+                // Store the cursor position
+                const pos = textareaRef.current?.selectionStart;
+                // Restore it after the state update
+                setTimeout(() => {
+                    if (textareaRef.current) {
+                        textareaRef.current.selectionStart = pos;
+                        textareaRef.current.selectionEnd = pos;
+                    }
+                }, 0);
+            }}
+            {...props}
+        />
+    );
+});
+
 function Message({ text, sender, languageConfig, onSpeakingStateChange }) {
     // Add speech synthesis to each message with speech state handling
     const speakMessage = useCallback(() => {
@@ -516,15 +591,293 @@ function Message({ text, sender, languageConfig, onSpeakingStateChange }) {
     );
 }
 
+// User Info Form Component - moved outside ChatWindow
+const UserInfoForm = ({ 
+    userInfo, 
+    handleUserInfoChange, 
+    handleUserFormSubmit, 
+    nameInputRef, 
+    ageInputRef, 
+    mainConcernRef, 
+    medicationsRef 
+}) => (
+    <Box 
+        as="form" 
+        onSubmit={handleUserFormSubmit} 
+        width="100%" 
+        p={4} 
+        borderRadius="lg" 
+        bg="white" 
+        boxShadow="md"
+    >
+        <VStack spacing={4} align="stretch">
+            <Heading size="md" color="blue.600" textAlign="center">
+                Welcome to NeuroSri
+            </Heading>
+            <Text textAlign="center" fontSize="sm" color="gray.600">
+                Please provide some information to help us personalize your experience
+            </Text>
+            
+            <Divider />
+            
+            <FormControl isRequired>
+                <FormLabel>Your Name</FormLabel>
+                <FocusPreservingInput 
+                    ref={nameInputRef}
+                    placeholder="Enter your name" 
+                    value={userInfo.name} 
+                    onChange={handleUserInfoChange('name')} 
+                />
+            </FormControl>
+            
+            <HStack spacing={8}>
+                <FormControl isRequired>
+                    <FormLabel>Age</FormLabel>
+                    <NumberInput 
+                        min={5} 
+                        max={100} 
+                        value={userInfo.age} 
+                        onChange={handleUserInfoChange('age')}
+                    >
+                        <NumberInputField 
+                            ref={ageInputRef} 
+                            placeholder="Age" 
+                        />
+                        <NumberInputStepper>
+                            <NumberIncrementStepper />
+                            <NumberDecrementStepper />
+                        </NumberInputStepper>
+                    </NumberInput>
+                </FormControl>
+                
+                <FormControl>
+                    <FormLabel>Gender</FormLabel>
+                    <RadioGroup value={userInfo.gender} onChange={handleUserInfoChange('gender')}>
+                        <Stack direction="row">
+                            <Radio value="male">Male</Radio>
+                            <Radio value="female">Female</Radio>
+                            <Radio value="other">Other</Radio>
+                        </Stack>
+                    </RadioGroup>
+                </FormControl>
+            </HStack>
+            
+            <FormControl isRequired>
+                <FormLabel>What brings you here today?</FormLabel>
+                <FocusPreservingTextarea 
+                    ref={mainConcernRef}
+                    placeholder="Please describe your main concerns or what you'd like help with" 
+                    value={userInfo.mainConcern} 
+                    onChange={handleUserInfoChange('mainConcern')}
+                    rows={3}
+                />
+            </FormControl>
+            
+            <HStack spacing={6}>
+                <FormControl>
+                    <FormLabel>Previous therapy experience?</FormLabel>
+                    <Select value={userInfo.previousTherapy} onChange={handleUserInfoChange('previousTherapy')}>
+                        <option value="no">No previous experience</option>
+                        <option value="some">Some experience</option>
+                        <option value="extensive">Extensive experience</option>
+                    </Select>
+                </FormControl>
+                
+                <FormControl>
+                    <FormLabel>Sleep quality recently</FormLabel>
+                    <Select value={userInfo.sleepQuality} onChange={handleUserInfoChange('sleepQuality')}>
+                        <option value="poor">Poor</option>
+                        <option value="fair">Fair</option>
+                        <option value="good">Good</option>
+                        <option value="excellent">Excellent</option>
+                    </Select>
+                </FormControl>
+            </HStack>
+            
+            <FormControl>
+                <FormLabel>Previous neurological history</FormLabel>
+                <Select value={userInfo.neurologicalHistory} onChange={handleUserInfoChange('neurologicalHistory')}>
+                    <option value="none">None</option>
+                    <option value="headaches">Frequent headaches</option>
+                    <option value="migraines">Migraines</option>
+                    <option value="seizures">Seizures</option>
+                    <option value="concussion">Previous concussion</option>
+                    <option value="tbi">Traumatic brain injury</option>
+                    <option value="stroke">Stroke</option>
+                    <option value="other">Other (specify in concerns)</option>
+                </Select>
+            </FormControl>
+            
+            <FormControl>
+                <FormLabel>Current medications (optional)</FormLabel>
+                <FocusPreservingTextarea 
+                    ref={medicationsRef}
+                    placeholder="List any current medications you are taking" 
+                    value={userInfo.medications} 
+                    onChange={handleUserInfoChange('medications')}
+                    rows={2}
+                />
+            </FormControl>
+            
+            <Button 
+                type="submit" 
+                colorScheme="blue" 
+                rightIcon={<FaPaperPlane />}
+                size="lg"
+                mt={2}
+            >
+                Start Session
+            </Button>
+            
+            <Text fontSize="xs" color="gray.500" textAlign="center">
+                Your information helps us provide personalized support but will not be shared externally.
+            </Text>
+        </VStack>
+    </Box>
+);
+
 function ChatWindow({ currentEmotion, emotionData }) {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
+    const [showUserForm, setShowUserForm] = useState(true);
     const [hasShownSetup, setHasShownSetup] = useState(false);
     const [hasShownInitial, setHasShownInitial] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [currentLanguage, setCurrentLanguage] = useState(LANGUAGES.ENGLISH);
     const [isSpeaking, setIsSpeakingState] = useState(false);
+    
+    // Create refs for input fields to maintain focus
+    const nameInputRef = useRef(null);
+    const ageInputRef = useRef(null);
+    const mainConcernRef = useRef(null);
+    const medicationsRef = useRef(null);
+    
+    const [userInfo, setUserInfo] = useState({
+        name: '',
+        age: '',
+        gender: 'male',
+        mainConcern: '',
+        previousTherapy: 'no',
+        sleepQuality: 'good',
+        neurologicalHistory: 'none',
+        medications: ''
+    });
     const toast = useToast();
+
+    // Function to handle user form input changes
+    const handleUserInfoChange = (field) => (eventOrValue) => {
+        const value = eventOrValue.target ? eventOrValue.target.value : eventOrValue;
+        // Only update state if the value has actually changed
+        setUserInfo((prev) => {
+            if (prev[field] === value) return prev; // No change, return previous state
+            return { ...prev, [field]: value }; // Update with new value
+        });
+    };
+
+    // Function to handle user form submission
+    const handleUserFormSubmit = async (e) => {
+        e.preventDefault();
+        
+        // Validate form
+        if (!userInfo.name.trim() || !userInfo.age || !userInfo.mainConcern.trim()) {
+            toast({
+                title: "Missing Information",
+                description: "Please fill out all required fields.",
+                status: "warning",
+                duration: 3000,
+                isClosable: true,
+            });
+            return;
+        }
+
+        try {
+            // Send user info to backend
+            const response = await api.submitUserInfo(userInfo);
+            
+            if (response && response.success) {
+                // Hide the form and show the chat interface
+                setShowUserForm(false);
+                
+                // Add a welcome message that uses the user's name
+                const welcomeMessage = { 
+                    text: `Hello ${userInfo.name}! I'm NeuroSri, your mental health AI counselor. I'll be analyzing your EEG signals to better understand your emotional state. Thank you for sharing your information about ${userInfo.mainConcern}. How are you feeling right now?`, 
+                    sender: 'bot' 
+                };
+                
+                setMessages([welcomeMessage]);
+                
+                // Speak the welcome message
+                speakText(
+                    welcomeMessage.text, 
+                    currentLanguage, 
+                    () => setIsSpeakingState(true), 
+                    () => setIsSpeakingState(false)
+                );
+                
+                toast({
+                    title: "Information Saved",
+                    description: "Thank you for sharing your information.",
+                    status: "success",
+                    duration: 3000,
+                    isClosable: true,
+                });
+            } else if (response && response.error) {
+                // Show error but continue anyway with local data
+                toast({
+                    title: "Warning",
+                    description: `${response.error} Continuing with local data only.`,
+                    status: "warning",
+                    duration: 5000,
+                    isClosable: true,
+                });
+                
+                // Continue with local data only
+                setShowUserForm(false);
+                
+                const welcomeMessage = { 
+                    text: `Hello ${userInfo.name}! I'm NeuroSri, your mental health AI counselor. Thank you for sharing your information about ${userInfo.mainConcern}. How are you feeling right now?`, 
+                    sender: 'bot' 
+                };
+                
+                setMessages([welcomeMessage]);
+                speakText(
+                    welcomeMessage.text, 
+                    currentLanguage, 
+                    () => setIsSpeakingState(true), 
+                    () => setIsSpeakingState(false)
+                );
+            } else {
+                throw new Error("Unknown error occurred");
+            }
+        } catch (error) {
+            console.error('Error submitting user info:', error);
+            
+            // Show error but continue anyway with local data
+            toast({
+                title: "Connection Error",
+                description: "Could not connect to the server. Continuing with local data only.",
+                status: "error",
+                duration: 5000,
+                isClosable: true,
+            });
+            
+            // Continue with local data only since server is unreachable
+            setShowUserForm(false);
+            
+            const welcomeMessage = { 
+                text: `Hello ${userInfo.name}! I'm NeuroSri, your mental health AI counselor working in offline mode. Thank you for sharing your information. How are you feeling right now?`, 
+                sender: 'bot' 
+            };
+            
+            setMessages([welcomeMessage]);
+            speakText(
+                welcomeMessage.text, 
+                currentLanguage, 
+                () => setIsSpeakingState(true), 
+                () => setIsSpeakingState(false)
+            );
+        }
+    };
 
     // Function to stop chatbot speech
     const stopSpeech = () => {
@@ -689,14 +1042,15 @@ function ChatWindow({ currentEmotion, emotionData }) {
         setInput('');
 
         try {
-            const response = await api.sendMessage(messageText);
+            // Include user info with message
+            const response = await api.sendMessage(messageText, userInfo);
             
             if (response && response.response) {
                 const botMessage = { text: response.response, sender: 'bot' };
                 setMessages(prev => [...prev, botMessage]);
                 // Automatically speak bot's response
                 speakResponse(response.response);
-            } else if (response.error) {
+            } else if (response && response.error) {
                 toast({
                     title: "Error",
                     description: response.error,
@@ -704,12 +1058,29 @@ function ChatWindow({ currentEmotion, emotionData }) {
                     duration: 3000,
                     isClosable: true,
                 });
+                
+                // Add fallback response so conversation can continue
+                const fallbackMessage = { 
+                    text: "I'm sorry, I couldn't process your message due to a connection issue. Could you try again?", 
+                    sender: 'bot' 
+                };
+                setMessages(prev => [...prev, fallbackMessage]);
+                speakResponse(fallbackMessage.text);
             }
         } catch (error) {
             console.error('Error sending message:', error);
+            
+            // Add fallback response so conversation can continue
+            const fallbackMessage = { 
+                text: "I'm sorry, I couldn't connect to my server. I'm working in offline mode right now. Could you try again later?", 
+                sender: 'bot' 
+            };
+            setMessages(prev => [...prev, fallbackMessage]);
+            speakResponse(fallbackMessage.text);
+            
             toast({
-                title: "Error",
-                description: "Failed to send message. Please try again.",
+                title: "Connection Error",
+                description: "Failed to connect to the server. Working in offline mode.",
                 status: "error",
                 duration: 3000,
                 isClosable: true,
@@ -717,68 +1088,11 @@ function ChatWindow({ currentEmotion, emotionData }) {
         }
     };
 
-    // Handle initial setup message
+    // Skip the initial setup and greeting messages
     useEffect(() => {
-        if (!hasShownSetup) {
-            const setupMessage = { 
-                text: "Hello! I'm NeuroSri, your mental health AI counselor. Please wear the EEG headset so I can better understand and support you. I'll be with you in just a moment...", 
-                sender: 'bot' 
-            };
-            setMessages([setupMessage]);
             setHasShownSetup(true);
-            
-            // Speak the initial greeting with state tracking
-            speakText(
-                setupMessage.text, 
-                currentLanguage, 
-                () => setIsSpeakingState(true), 
-                () => setIsSpeakingState(false)
-            );
-        }
+        setHasShownInitial(true);
     }, []);
-
-    // Handle first emotion detection message
-    useEffect(() => {
-        if (!hasShownInitial && emotionData?.emotion && emotionData.emotion !== 'neutral') {
-            const initialMessage = { 
-                text: "Great! I can now detect your EEG signals and emotional state. I'm NeuroSri, your AI mental health counselor, and I'm here to support you. Could you tell me your name and a bit about yourself? How are you feeling today?", 
-                sender: 'bot' 
-            };
-            setMessages(prev => [...prev, initialMessage]);
-            setHasShownInitial(true);
-            
-            // Speak the welcome message with state tracking
-            speakText(
-                initialMessage.text, 
-                currentLanguage, 
-                () => setIsSpeakingState(true), 
-                () => setIsSpeakingState(false)
-            );
-        }
-    }, [emotionData?.emotion, hasShownInitial]);
-
-    // Handle subsequent chat messages
-    useEffect(() => {
-        if (emotionData?.chat_message && hasShownInitial) {
-            const botMessage = { text: emotionData.chat_message, sender: 'bot' };
-            setMessages(prev => {
-                // Check if this message is already in the list to avoid duplicates
-                const isDuplicate = prev.some(msg => 
-                    msg.text === botMessage.text && msg.sender === 'bot'
-                );
-                if (isDuplicate) return prev;
-                
-                // Auto-speak new messages from the chatbot with state tracking
-                speakText(
-                    botMessage.text, 
-                    currentLanguage, 
-                    () => setIsSpeakingState(true), 
-                    () => setIsSpeakingState(false)
-                );
-                return [...prev, botMessage];
-            });
-        }
-    }, [emotionData?.chat_message, hasShownInitial]);
 
     // Ensure voices are loaded when component mounts and initialize female voices
     useEffect(() => {
@@ -828,25 +1142,72 @@ function ChatWindow({ currentEmotion, emotionData }) {
         }
     }, []);
 
+    // Create the user context prompt with the updated fields
+    const _create_user_context_prompt = () => {
+        const profile = userInfo;
+        
+        // Format information about the user
+        let user_context = (
+            `User Profile Information:\n`+
+            `- Name: ${profile.name}\n`+
+            `- Age: ${profile.age}\n`+
+            `- Gender: ${profile.gender}\n`+
+            `- Main concern: ${profile.mainConcern}\n`
+        );
+        
+        // Add additional details if available
+        if (profile.previousTherapy) {
+            user_context += `- Previous therapy experience: ${profile.previousTherapy}\n`;
+        }
+        
+        if (profile.sleepQuality) {
+            user_context += `- Sleep quality: ${profile.sleepQuality}\n`;
+        }
+        
+        if (profile.neurologicalHistory && profile.neurologicalHistory !== 'none') {
+            user_context += `- Neurological history: ${profile.neurologicalHistory}\n`;
+        }
+        
+        if (profile.medications && profile.medications.trim()) {
+            user_context += `- Current medications: ${profile.medications}\n`;
+        }
+        
+        return user_context;
+    };
+
     return (
         <Box borderWidth={1} borderRadius="lg" p={4} bg="white" height="600px">
             <VStack h="100%" spacing={4}>
-                <HStack w="100%" justifyContent="space-between">
-                    <Select 
-                        size="sm" 
-                        width="150px" 
-                        value={currentLanguage === LANGUAGES.HINDI ? 'hindi' : 'english'}
-                        onChange={handleLanguageChange}
-                        icon={<FaLanguage />}
-                    >
-                        <option value="english">English</option>
-                        <option value="hindi">Hindi</option>
-                    </Select>
-                    <Text fontSize="xs" color="gray.500">
-                        Female Voice: {currentLanguage.name}
-                    </Text>
-                </HStack>
+                {!showUserForm && (
+                    <HStack w="100%" justifyContent="space-between">
+                        <Select 
+                            size="sm" 
+                            width="150px" 
+                            value={currentLanguage === LANGUAGES.HINDI ? 'hindi' : 'english'}
+                            onChange={handleLanguageChange}
+                            icon={<FaLanguage />}
+                        >
+                            <option value="english">English</option>
+                            <option value="hindi">Hindi</option>
+                        </Select>
+                        <Text fontSize="xs" color="gray.500">
+                            Female Voice: {currentLanguage.name}
+                        </Text>
+                    </HStack>
+                )}
                 
+                {showUserForm ? (
+                    <UserInfoForm 
+                        userInfo={userInfo}
+                        handleUserInfoChange={handleUserInfoChange}
+                        handleUserFormSubmit={handleUserFormSubmit}
+                        nameInputRef={nameInputRef}
+                        ageInputRef={ageInputRef}
+                        mainConcernRef={mainConcernRef}
+                        medicationsRef={medicationsRef}
+                    />
+                ) : (
+                    <>
                 <Box 
                     flex="1" 
                     w="100%" 
@@ -871,8 +1232,8 @@ function ChatWindow({ currentEmotion, emotionData }) {
                             key={index}
                             text={message.text}
                             sender={message.sender}
-                            languageConfig={currentLanguage}
-                            onSpeakingStateChange={setIsSpeakingState}
+                                    languageConfig={currentLanguage}
+                                    onSpeakingStateChange={setIsSpeakingState}
                         />
                     ))}
                 </Box>
@@ -882,28 +1243,28 @@ function ChatWindow({ currentEmotion, emotionData }) {
                         <Input
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder={`Type your message in ${currentLanguage.name}...`}
+                                    placeholder={`Type your message in ${currentLanguage.name}...`}
                             size="md"
                         />
-                        
-                        {/* Stop Speech Button - only visible when speaking */}
-                        {isSpeaking && (
-                            <Tooltip label="Stop chatbot speaking">
-                                <IconButton
-                                    aria-label="Stop speech"
-                                    icon={<FaVolumeMute />}
-                                    onClick={stopSpeech}
-                                    colorScheme="orange"
-                                />
-                            </Tooltip>
-                        )}
-                        
-                        <Tooltip label={isListening ? 
-                            `Stop ${currentLanguage.name} voice input` : 
-                            `Start ${currentLanguage.name} voice input`}
-                        >
+                                
+                                {/* Stop Speech Button - only visible when speaking */}
+                                {isSpeaking && (
+                                    <Tooltip label="Stop chatbot speaking">
+                                        <IconButton
+                                            aria-label="Stop speech"
+                                            icon={<FaVolumeMute />}
+                                            onClick={stopSpeech}
+                                            colorScheme="orange"
+                                        />
+                                    </Tooltip>
+                                )}
+                                
+                                <Tooltip label={isListening ? 
+                                    `Stop ${currentLanguage.name} voice input` : 
+                                    `Start ${currentLanguage.name} voice input`}
+                                >
                             <IconButton
-                                aria-label={`${currentLanguage.name} voice input`}
+                                        aria-label={`${currentLanguage.name} voice input`}
                                 icon={isListening ? <FaStop /> : <FaMicrophone />}
                                 onClick={toggleVoiceInput}
                                 colorScheme={isListening ? "red" : "gray"}
@@ -914,6 +1275,8 @@ function ChatWindow({ currentEmotion, emotionData }) {
                         </Button>
                     </HStack>
                 </form>
+                    </>
+                )}
             </VStack>
         </Box>
     );

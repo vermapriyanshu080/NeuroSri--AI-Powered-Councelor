@@ -1,0 +1,8 @@
+User Profile Information:
+- Name: suyash
+- Age: 21
+- Gender: male
+- Main concern: i am sad
+- Previous therapy experience: no
+- Sleep quality: good
+- Neurological history: migraines

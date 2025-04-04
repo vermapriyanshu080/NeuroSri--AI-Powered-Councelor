@@ -3,6 +3,9 @@ import sys
 from pathlib import Path
 import random
 import logging
+from typing import Dict, Any, Optional
+import traceback
+from src.chatbot.chatbot_service import ChatbotService
 
 # Add project root to Python path
 project_root = Path(__file__).resolve().parent.parent.parent
@@ -19,7 +22,7 @@ class TherapeuticBot:
         self.conversation_history = []
         # Update the system prompt to emphasize feminine identity if it's not already defined in settings
         if not hasattr(self, 'system_prompt') or self.system_prompt is None:
-            self.system_prompt = CHATBOT_SYSTEM_PROMPT
+        self.system_prompt = CHATBOT_SYSTEM_PROMPT
             # Add feminine identity to the system prompt if not already present
             if "female" not in self.system_prompt.lower():
                 self.system_prompt = self.system_prompt.replace(
@@ -28,103 +31,108 @@ class TherapeuticBot:
                 )
         self.last_emotion = None
         self.client = Client()
+        self.chatbot_service = ChatbotService()
+        self.user_profile = None
+        logger.info("TherapeuticBot initialized")
         
-    def generate_response(self, user_input: str, emotion: str, confidence: float, is_initial: bool = False) -> str:
-        """Generate therapeutic response based on user input and detected emotion."""
+    def update_user_profile(self, user_info: Dict[str, Any]) -> None:
+        """
+        Update the user profile with information collected from the user form.
+        
+        Args:
+            user_info: Dictionary containing user information
+        """
         try:
-            # Check for emotion changes
-            emotion_changed = self.last_emotion is not None and self.last_emotion != emotion
-            self.last_emotion = emotion
+            self.user_profile = user_info
+            logger.info(f"User profile updated: {user_info['name']}, age: {user_info['age']}")
             
-            # Format confidence as percentage
-            confidence_pct = f"{confidence * 100:.1f}%"
+            # Update the chatbot service with user information
+            user_context = self._create_user_context_prompt()
+            self.chatbot_service.update_system_prompt(user_context)
             
-            # Prepare the context with emotion information
-            emotion_context = (
-                f"[Current EEG Analysis:\n"
-                f"- Emotional State: {emotion}\n"
-                f"- Confidence Level: {confidence_pct}\n"
-                f"- Brain Activity: {self._get_brain_activity_description(emotion)}]"
+        except Exception as e:
+            logger.error(f"Error updating user profile: {e}")
+            logger.error(traceback.format_exc())
+    
+    def _create_user_context_prompt(self) -> str:
+        """
+        Create a prompt with user context information for the chatbot.
+        
+        Returns:
+            String containing user context information for the system prompt
+        """
+        if not self.user_profile:
+            return ""
+        
+        try:
+            profile = self.user_profile
+            
+            # Format information about the user
+            user_context = (
+                f"User Profile Information:\n"
+                f"- Name: {profile.get('name', 'Unknown')}\n"
+                f"- Age: {profile.get('age', 'Unknown')}\n"
+                f"- Gender: {profile.get('gender', 'Unknown')}\n"
+                f"- Main concern: {profile.get('mainConcern', 'Not specified')}\n"
             )
             
-            if emotion_changed:
-                emotion_context += f"\n[Emotional Shift: Your brainwave patterns indicate a change from {self.last_emotion} to {emotion}]"
+            # Add additional details if available
+            if profile.get('previousTherapy'):
+                user_context += f"- Previous therapy experience: {profile.get('previousTherapy')}\n"
             
-            # Construct the full prompt
-            if is_initial:
-                full_prompt = (
-                    f"{emotion_context}\n\n"
-                    f"As NeuroSri, a female AI counselor, start a warm and engaging conversation. Introduce yourself, show interest in the user's well-being, "
-                    f"and acknowledge your ability to understand their emotions through brainwaves. Based on their current "
-                    f"emotional state of {emotion} (confidence: {confidence_pct}), provide appropriate emotional support and guidance with your nurturing, feminine voice."
-                )
-            else:
-                full_prompt = (
-                    f"{emotion_context}\n\n"
-                    f"User Message: {user_input}\n\n"
-                    f"As NeuroSri, a female AI counselor, respond warmly and empathetically with your nurturing feminine voice. Consider their current emotional state of {emotion} "
-                    f"and provide appropriate support, guidance, or encouragement. Remember to validate their feelings "
-                    f"and offer practical suggestions when relevant."
-                )
-            
-            # Add conversation history for context
-            if self.conversation_history:
-                history = "\n".join(self.conversation_history[-3:])  # Last 3 exchanges
-                full_prompt = f"Previous Conversation:\n{history}\n\n{full_prompt}"
-            
-            # Get emotion-specific prompt enhancement
-            enhanced_prompt = self._enhance_system_prompt(emotion)
-
-            try:
-                # Try with gpt-4o-mini first
-                response = self.client.chat.completions.create(
-                    model="gpt-4o-mini",  # Using a more reliable model
-                    messages=[
-                        {"role": "system", "content": enhanced_prompt},
-                        {"role": "user", "content": full_prompt}
-                    ],
-                    max_tokens=MAX_RESPONSE_LENGTH,
-                    web_search=False
-                )
+            if profile.get('sleepQuality'):
+                user_context += f"- Sleep quality: {profile.get('sleepQuality')}\n"
                 
-                if response and isinstance(response, str) and len(response.strip()) > 0:
-                    logger.info("Successfully generated response using gpt-4o-mini")
-                    # Update conversation history
-                    if user_input:
-                        self.conversation_history.append(f"User: {user_input}")
-                        self.conversation_history.append(f"NeuroSri (Female AI): {response}")
-                    return response
-                    
-            except Exception as e:
-                logger.error(f"Error with gpt-4o-mini: {str(e)}")
-                # If gpt-4o-mini fails, try with a fallback model
-                try:
-                    response = self.client.chat.completions.create(
-                        model="gpt-3.5-turbo",
-                        messages=[
-                            {"role": "system", "content": enhanced_prompt},
-                            {"role": "user", "content": full_prompt}
-                        ],
-                        max_tokens=MAX_RESPONSE_LENGTH,
-                        web_search=False
-                    )
-                    
-                    if response and isinstance(response, str) and len(response.strip()) > 0:
-                        logger.info("Successfully generated response using fallback model")
-                        if user_input:
-                            self.conversation_history.append(f"User: {user_input}")
-                            self.conversation_history.append(f"NeuroSri (Female AI): {response}")
-                        return response
-                        
-                except Exception as fallback_error:
-                    logger.error(f"Fallback model also failed: {str(fallback_error)}")
-                    return self._get_fallback_response(emotion)
+            if profile.get('stressLevel'):
+                user_context += f"- Stress level: {profile.get('stressLevel')}\n"
             
-            return self._get_fallback_response(emotion)
+            # Add instructions to use this information
+            user_context += (
+                "\nUse this information to personalize your responses. "
+                "Refer to the user by name and tailor your therapeutic approach "
+                "based on their specific concerns and background. "
+                "However, avoid directly mentioning that you have this information "
+                "unless it's relevant to the conversation flow."
+            )
+            
+            return user_context
+            
+        except Exception as e:
+            logger.error(f"Error creating user context prompt: {e}")
+            return ""
+    
+    def generate_response(self, user_input: str, emotion: str = "neutral", 
+                         confidence: float = 0.0, user_info: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate a response based on user input and detected emotion.
+        
+        Args:
+            user_input: The user's message
+            emotion: The detected emotion from EEG data
+            confidence: Confidence score for the detected emotion
+            user_info: User profile information (optional, updates the stored profile if provided)
+            
+        Returns:
+            String containing the chatbot's response
+        """
+        try:
+            # Update user profile if new info is provided
+            if user_info and not self.user_profile:
+                self.update_user_profile(user_info)
+            
+            # Generate response through the chatbot service
+            response = self.chatbot_service.get_response(user_input, emotion, confidence)
+            
+            if not response:
+                logger.warning("Empty response from chatbot service")
+                return "I'm sorry, I couldn't generate a response. Could you please try again?"
+            
+            return response
             
         except Exception as e:
             logger.error(f"Error generating response: {e}")
-            return self._get_fallback_response(emotion)
+            logger.error(traceback.format_exc())
+            return "I apologize, but I'm having trouble processing your request right now. Please try again in a moment."
             
     def _get_brain_activity_description(self, emotion: str) -> str:
         """Get a user-friendly description of brain activity based on emotion."""

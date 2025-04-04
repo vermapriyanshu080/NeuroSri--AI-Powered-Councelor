@@ -32,6 +32,9 @@ app = Flask(__name__)
 # Enable CORS for all domains
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+# Global variable to store user information
+user_info = None
+
 # Initialize components with error handling
 try:
     logger.info("Initializing EEG stream connection...")
@@ -146,59 +149,78 @@ def get_current_eeg_analysis():
         logger.error(f"Error getting EEG analysis: {e}")
         return None
 
+@app.route('/api/user-info', methods=['POST'])
+def submit_user_info():
+    global user_info
+    try:
+        data = request.get_json()
+        
+        if not data or 'userInfo' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'No user information provided'
+            }), 400
+        
+        # Store user info in global variable
+        user_info = data['userInfo']
+        
+        # Log the received user information
+        logger.info(f"Received user information: {user_info}")
+        
+        # Update the chatbot with user information
+        if chatbot:
+            try:
+                # Add user profile info to chatbot context
+                chatbot.update_user_profile(user_info)
+                logger.info("Chatbot updated with user information")
+            except Exception as e:
+                logger.error(f"Error updating chatbot with user info: {e}")
+                # Continue anyway as this is not critical
+        
+        return jsonify({
+            'success': True,
+            'message': 'User information saved successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error in user-info endpoint: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    """
-    Chat endpoint that handles user messages and returns bot responses
-    Expected JSON input: {
-        "message": "user's message here"
-    }
-    """
     try:
-        # Log the incoming request
-        logger.info("Received chat request")
+        data = request.get_json()
         
-        # Get the user's message from the request
-        data = request.json
         if not data or 'message' not in data:
-            logger.error("No message found in request")
             return jsonify({
-                "error": "No message provided",
-                "status": "error"
+                'status': 'error',
+                'error': 'No message provided'
             }), 400
-            
-        user_message = data['message']
-        logger.info(f"User message: {user_message}")
         
-        # Get current EEG analysis for context
-        eeg_context = get_current_eeg_analysis()
-        logger.debug(f"EEG context: {eeg_context}")
+        message = data['message']
+        # Include user info if available
+        user_data = user_info if user_info else data.get('userInfo')
         
-        # Extract emotion and confidence from EEG context
-        if eeg_context:
-            emotion = eeg_context.get('emotion', 'neutral')
-            confidence = eeg_context.get('confidence', 0.5)
-            logger.info(f"Current emotion: {emotion} (confidence: {confidence:.2f})")
-        else:
-            emotion = 'neutral'
-            confidence = 0.5
-            logger.warning("No EEG context available, using default values")
+        # Get current emotion analysis from EEG data
+        emotion_result = get_current_eeg_analysis()
+        emotion_data = emotion_result.get_json() if hasattr(emotion_result, 'get_json') else {}
         
-        # Generate response using TherapeuticBot
-        logger.info("Generating chatbot response...")
-        response = chatbot.generate_response(
-            user_input=user_message,
-            emotion=emotion,
-            confidence=confidence,
-            is_initial=False
-        )
+        current_emotion = emotion_data.get('emotion', 'neutral')
+        confidence = emotion_data.get('confidence', 0)
+        eeg_context = emotion_data.get('eeg_context', 'EEG signal is not available or inconclusive.')
         
-        logger.info("Response generated successfully")
-        logger.debug(f"Bot response: {response}")
+        logger.info(f"Chat request with message: '{message}'")
+        logger.info(f"Current emotion: {current_emotion}, Confidence: {confidence}")
         
-        # Return the response with context
+        # Generate chatbot response, including user info if available
+        response = chatbot.generate_response(message, current_emotion, confidence, user_data)
+        
         return jsonify({
             "response": response,
+            "emotion": current_emotion,
+            "confidence": confidence,
             "status": "success",
             "eeg_context": eeg_context,
             "timestamp": datetime.now().isoformat()

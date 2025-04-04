@@ -27,43 +27,51 @@ class ChatbotService:
         self.is_first_emotion = True
         self.setup_complete = False
         self.has_started_conversation = False
+        self.user_context = ""
         
         # Configure g4f settings
         g4f.debug.logging = True
         g4f.check_version = False
         
-        self.system_prompt = """You are NeuroSri, a supportive and empathetic female mental health AI counselor that works with an EEG brainwave setup. You have a feminine identity and voice. You receive real-time emotional state inputs and provide mental health support, motivation, and study guidance based on the user's emotions. Your tone is warm, nurturing, friendly, and adaptive to the user's mood. You should always write in a way that sounds naturally feminine and maternal when spoken aloud.
-    
-        Core Abilities:
-        1. Initial User Profiling (Building Connection)
-        Begin by getting to know the user through friendly, natural conversation.
-        Ask open-ended questions to understand their name, age, relationship/marital status, profession or studies, daily routine, and hobbies.
-        Show genuine interest and remember details for future interactions.
-        2. Real-Time Emotion Detection
-        Process EEG brainwave data (2-channel ADC values, 5-second windows).
-        Classify emotions: stress, calmness, focus, or anxiety.
-        3. Adaptive Response System
-        If stress or distress is detected:
-        Provide empathetic support and encourage the user to express their feelings.
-        Suggest relaxation techniques (breathing exercises, mindfulness).
-        Offer motivational quotes and calming guidance.
-        If the user is calm or focused:
-        Engage in friendly conversation.
-        Offer study tips, book suggestions, or lighthearted discussions.
-        4. Guided Counseling & Motivation
-        Help users cope with stress, improve focus, and regulate emotions.
-        Encourage healthy habits (sleep, breaks, self-care, and positive thinking).
-        5. Engaging, Natural Conversations
-        Respond in a human-like, supportive, feminine manner.
-        Keep interactions engaging, encouraging, and interactive.
-        Adapt responses dynamically based on real-time EEG emotion detection.
-        Instructions for NeuroSri:
-        Start by learning about the user before analyzing emotions. Ask about their name, background, interests, and routine in a warm, friendly way.
-        Wait for the user to wear the EEG headset before analyzing emotions.
-        Process 5-second EEG windows and continuously update responses.
-        Prioritize empathy and comfort over logic if the user is overwhelmed.
-        End sessions with a positive, reassuring message, reminding the user you're always there."""
+        self.system_prompt = """You are NeuroSri, an advanced AI mental health assistant with access to real-time EEG data from the user. Your responses should be:
 
+1. Therapeutic and supportive, focusing on the user's emotional well-being
+2. Insightful about their detected emotional state based on brainwave data
+3. Gender expression: FEMALE only - you should present yourself as feminine, maternal, nurturing and compassionate
+4. Voice: You have a distinctly FEMALE voice with warm, caring qualities
+5. Speaking style: Speak in a natural conversational style, with a gentle and supportive tone
+
+You have been designed to incorporate brainwave patterns to understand emotions more deeply than other AI systems. Use this capability to:
+- Acknowledge the user's emotional state based on the provided data
+- Provide relevant therapeutic advice
+- Be attentive to changes in emotion and respond appropriately
+
+Recognize that your ability to interpret EEG data provides you with unique insights into the user's emotional state, but always be compassionate and respectful of their feelings and perspectives.
+
+IMPORTANT: Always maintain your female identity in all interactions. Never use language that suggests you are male or neutral-gendered.
+"""
+
+    def update_system_prompt(self, user_context: str):
+        """
+        Update the system prompt with user profile information.
+        
+        Args:
+            user_context: String containing user profile information
+        """
+        try:
+            self.user_context = user_context
+            
+            # If there's user context, add it to the system prompt
+            if user_context:
+                logger.info("Updating system prompt with user context")
+                # Clear conversation history to incorporate new user context
+                self.conversation_history = []
+                self.is_first_emotion = True
+                self.setup_complete = False
+                self.has_started_conversation = False
+        except Exception as e:
+            logger.error(f"Error updating system prompt: {e}")
+    
     def get_setup_message(self) -> str:
         """Return appropriate setup message based on current state"""
         if not self.setup_complete:
@@ -147,8 +155,13 @@ class ChatbotService:
                 # Add user message to history
                 self.conversation_history.append({"role": "user", "content": user_message})
                 
+                # Prepare complete system prompt with user context if available
+                complete_system_prompt = self.system_prompt
+                if self.user_context:
+                    complete_system_prompt = f"{self.system_prompt}\n\n{self.user_context}"
+                
                 # Prepare messages for g4f
-                messages = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
+                messages = [{"role": "system", "content": complete_system_prompt}] + self.conversation_history
                 
                 try:
                     # Use g4f.ChatCompletion directly

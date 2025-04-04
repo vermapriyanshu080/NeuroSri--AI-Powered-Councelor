@@ -31,6 +31,36 @@ logging.basicConfig(
 # Create logger
 logger = logging.getLogger(__name__)
 
+# Create a dedicated user data logger
+user_data_logger = logging.getLogger('user_data')
+user_data_logger.setLevel(logging.INFO)
+
+# Create handler with custom formatting for user data
+user_data_file_handler = logging.FileHandler('user_data.log')
+user_data_formatter = logging.Formatter('%(asctime)s - %(message)s')
+user_data_file_handler.setFormatter(user_data_formatter)
+user_data_logger.addHandler(user_data_file_handler)
+
+# Add a console handler for user data with colored output
+user_data_console_handler = logging.StreamHandler()
+user_data_console_handler.setFormatter(user_data_formatter)
+user_data_logger.addHandler(user_data_console_handler)
+
+# Create a dedicated chat logger
+chat_logger = logging.getLogger('chat_data')
+chat_logger.setLevel(logging.INFO)
+
+# Create handler with custom formatting for chat data
+chat_file_handler = logging.FileHandler('chat_data.log')
+chat_formatter = logging.Formatter('%(asctime)s - %(message)s')
+chat_file_handler.setFormatter(chat_formatter)
+chat_logger.addHandler(chat_file_handler)
+
+# Add a console handler for chat data
+chat_console_handler = logging.StreamHandler()
+chat_console_handler.setFormatter(chat_formatter)
+chat_logger.addHandler(chat_console_handler)
+
 # Create a filter for logs
 class LogFilter(logging.Filter):
     def filter(self, record):
@@ -260,6 +290,80 @@ def get_emotion():
             'setup_complete': False
         })
 
+@app.route('/api/user/info', methods=['POST'])
+def submit_user_info():
+    """API endpoint to submit user information and save it with detailed logging"""
+    try:
+        # Get user info from request
+        user_data = request.get_json()
+        
+        # Log all user data details to dedicated user data log
+        user_data_logger.info("=================== USER INFORMATION RECEIVED ===================")
+        user_data_logger.info(f"Name: {user_data.get('name', 'Not provided')}")
+        user_data_logger.info(f"Age: {user_data.get('age', 'Not provided')}")
+        user_data_logger.info(f"Gender: {user_data.get('gender', 'Not provided')}")
+        user_data_logger.info(f"Main Concern: {user_data.get('mainConcern', 'Not provided')}")
+        user_data_logger.info(f"Previous Therapy: {user_data.get('previousTherapy', 'Not provided')}")
+        user_data_logger.info(f"Sleep Quality: {user_data.get('sleepQuality', 'Not provided')}")
+        user_data_logger.info(f"Neurological History: {user_data.get('neurologicalHistory', 'Not provided')}")
+        user_data_logger.info(f"Medications: {user_data.get('medications', 'Not provided')}")
+        user_data_logger.info("===============================================================")
+        
+        # Create formatted user context string
+        user_context = (
+            f"User Profile Information:\n"
+            f"- Name: {user_data.get('name', 'Unknown')}\n"
+            f"- Age: {user_data.get('age', 'Unknown')}\n"
+            f"- Gender: {user_data.get('gender', 'Unknown')}\n"
+            f"- Main concern: {user_data.get('mainConcern', 'Unknown')}\n"
+        )
+        
+        # Add optional fields if provided
+        if user_data.get('previousTherapy'):
+            user_context += f"- Previous therapy experience: {user_data.get('previousTherapy')}\n"
+        
+        if user_data.get('sleepQuality'):
+            user_context += f"- Sleep quality: {user_data.get('sleepQuality')}\n"
+        
+        if user_data.get('neurologicalHistory') and user_data.get('neurologicalHistory') != 'none':
+            user_context += f"- Neurological history: {user_data.get('neurologicalHistory')}\n"
+        
+        if user_data.get('medications') and user_data.get('medications').strip():
+            user_context += f"- Current medications: {user_data.get('medications')}\n"
+        
+        # Save to a user profile file with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"user_profile_{timestamp}.txt"
+        
+        try:
+            with open(filename, 'w') as f:
+                f.write(user_context)
+            logger.info(f"User profile saved to {filename}")
+        except Exception as file_error:
+            logger.error(f"Error saving user profile to file: {str(file_error)}")
+        
+        # Update chatbot with user context if chatbot is initialized
+        if chatbot is not None:
+            try:
+                chatbot.update_system_prompt(user_context)
+                logger.info("Chatbot updated with user profile information")
+            except Exception as chatbot_error:
+                logger.error(f"Error updating chatbot with user context: {str(chatbot_error)}")
+        
+        # Return success response
+        return jsonify({
+            'success': True,
+            'message': 'User information saved successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error processing user information: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'error': str(e),
+            'message': 'There was an error saving your information'
+        }), 500
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
     """API endpoint for chatbot interaction"""
@@ -271,14 +375,27 @@ def chat():
         # Get message from request
         data = request.get_json()
         user_message = data.get('message', '')
+        user_info = data.get('userInfo', {})
+        
+        # Log the user message
+        chat_logger.info("=== USER MESSAGE ===")
+        chat_logger.info(f"User: {user_message}")
         
         # Get current emotion state
         with prediction_lock:
             current_emotion = last_prediction["emotion"]
             confidence = last_prediction["confidence"]
         
+        # Log current emotional state
+        chat_logger.info(f"Current Emotion: {current_emotion} (Confidence: {confidence:.2f})")
+        
         # Get chatbot response
         response = chatbot.get_response(user_message, current_emotion, confidence)
+        
+        # Log the bot response
+        chat_logger.info("=== BOT RESPONSE ===")
+        chat_logger.info(f"Bot: {response}")
+        chat_logger.info("===================")
         
         # Return response in the correct format
         return jsonify({

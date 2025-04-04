@@ -163,7 +163,7 @@ class EEGEmotionClassifier:
         except Exception as e:
             logger.error(f"Error initializing classifier: {e}")
             raise
-
+    
     def extract_features(self, eeg_data):
         """Extract features from raw EEG data"""
         try:
