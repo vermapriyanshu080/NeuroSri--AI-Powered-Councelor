@@ -5,6 +5,7 @@ from datetime import datetime
 import threading
 import queue
 import numpy as np
+from torch import Use
 from src.ml.deep_emotion_model import EEGEmotionClassifier
 import traceback
 import time
@@ -333,7 +334,13 @@ def submit_user_info():
         
         # Save to a user profile file with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"user_profile_{timestamp}.txt"
+        
+        # Create userProfiles directory if it doesn't exist
+        profiles_dir = Path("userProfiles")
+        profiles_dir.mkdir(exist_ok=True)
+        
+        # Use Path for proper file path handling
+        filename = profiles_dir / f"user_profile_{timestamp}.txt"
         
         try:
             with open(filename, 'w') as f:

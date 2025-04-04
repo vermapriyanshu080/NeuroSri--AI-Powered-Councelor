@@ -166,19 +166,19 @@ IMPORTANT: Always maintain your female identity in all interactions. Never use l
                 try:
                     # Use g4f.ChatCompletion directly
                     logger.info("Attempting to generate response...")
-                    #response = client.chat.completions.create(
-                    #    model="Meta-Llama-3-1-8B-Instruct-FP8",  # Using a more reliable model
-                    #    messages=messages,
-                    #    stream=False   
-                    #)
-                    #response = textwrap.fill(response.choices[0].message.content,50)
-
-
-                    response = g4f.ChatCompletion.create(
-                        model="gpt-4o-mini",  # Using a more reliable model
+                    response = client.chat.completions.create(
+                        model="Meta-Llama-3-1-8B-Instruct-FP8",  # Using a more reliable model
                         messages=messages,
                         stream=False   
                     )
+                    response = textwrap.fill(response.choices[0].message.content,50)
+
+
+                    # response = g4f.ChatCompletion.create(
+                    #     model="gpt-4o-mini",  # Using a more reliable model
+                    #     messages=messages,
+                    #     stream=False   
+                    # )
                     
                     response.replace("**","")
 
