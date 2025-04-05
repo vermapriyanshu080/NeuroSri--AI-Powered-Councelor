@@ -92,7 +92,7 @@ export default function MentalHealthChatbot() {
     }
 
     // show loading state while we wait for the download
-    setIsDownloading(true)
+    setIsDownloading(true) 
 
     try {
       // call our fancy new API endpoint for downloading chats
