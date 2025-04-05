@@ -5,25 +5,24 @@ import random
 import logging
 from typing import Dict, Any, Optional
 import traceback
+
 from src.chatbot.chatbot_service import ChatbotService
 
-# Add project root to Python path
+# gotta add the project root to path or imports will break 🙄
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(project_root))
 
-# Use absolute import
 from src.config.settings import CHATBOT_SYSTEM_PROMPT, MAX_RESPONSE_LENGTH
 
 logger = logging.getLogger(__name__)
 
-# Define list of providers to try
 class TherapeuticBot:
     def __init__(self):
         self.conversation_history = []
-        # Update the system prompt to emphasize feminine identity if it's not already defined in settings
+
+        # setup system prompt - we NEED to make sure it sounds female!
         if not hasattr(self, 'system_prompt') or self.system_prompt is None:
             self.system_prompt = CHATBOT_SYSTEM_PROMPT
-            # Add feminine identity to the system prompt if not already present
             if "female" not in self.system_prompt.lower():
                 self.system_prompt = self.system_prompt.replace(
                     "You are NeuroSri,", 
@@ -37,16 +36,16 @@ class TherapeuticBot:
         
     def update_user_profile(self, user_info: Dict[str, Any]) -> None:
         """
-        Update the user profile with information collected from the user form.
+        Updates the user profile with form data - helps make responses personal!
         
         Args:
-            user_info: Dictionary containing user information
+            user_info: Dict with all the juicy user details
         """
         try:
             self.user_profile = user_info
             logger.info(f"User profile updated: {user_info['name']}, age: {user_info['age']}")
             
-            # Update the chatbot service with user information
+            # Create and update context - this is what makes responses feel "magical"
             user_context = self._create_user_context_prompt()
             self.chatbot_service.update_system_prompt(user_context)
             
@@ -56,10 +55,10 @@ class TherapeuticBot:
     
     def _create_user_context_prompt(self) -> str:
         """
-        Create a prompt with user context information for the chatbot.
+        Builds a nice personalized prompt for our bot - makes it feel like it "knows" the user.
         
         Returns:
-            String containing user context information for the system prompt
+            A fancy formatted string with all the user info (if we have any)
         """
         if not self.user_profile:
             return ""
@@ -67,7 +66,7 @@ class TherapeuticBot:
         try:
             profile = self.user_profile
             
-            # Format information about the user
+            # build a nice formatted user profile - makes the AI responses way better!
             user_context = (
                 f"User Profile Information:\n"
                 f"- Name: {profile.get('name', 'Unknown')}\n"
@@ -76,7 +75,7 @@ class TherapeuticBot:
                 f"- Main concern: {profile.get('mainConcern', 'Not specified')}\n"
             )
             
-            # Add additional details if available
+            # add the extra stuff if we have it - more is better, right?
             if profile.get('previousTherapy'):
                 user_context += f"- Previous therapy experience: {profile.get('previousTherapy')}\n"
             
@@ -86,7 +85,7 @@ class TherapeuticBot:
             if profile.get('stressLevel'):
                 user_context += f"- Stress level: {profile.get('stressLevel')}\n"
             
-            # Add instructions to use this information
+            # IMPORTANT: tell the bot how to use this info without being creepy
             user_context += (
                 "\nUse this information to personalize your responses. "
                 "Refer to the user by name and tailor your therapeutic approach "
@@ -99,30 +98,31 @@ class TherapeuticBot:
             
         except Exception as e:
             logger.error(f"Error creating user context prompt: {e}")
-            return ""
+            return ""  # meh, just return empty string if it fails
     
     def generate_response(self, user_input: str, emotion: str = "neutral", 
                          confidence: float = 0.0, user_info: Optional[Dict[str, Any]] = None) -> str:
         """
-        Generate a response based on user input and detected emotion.
+        The main function that makes the bot talk! Give it user text, get AI response.
         
         Args:
-            user_input: The user's message
-            emotion: The detected emotion from EEG data
-            confidence: Confidence score for the detected emotion
-            user_info: User profile information (optional, updates the stored profile if provided)
+            user_input: What the human said
+            emotion: How they're feeling (from EEG)
+            confidence: How sure we are about the emotion (0-1)
+            user_info: Optional user profile stuff
             
         Returns:
-            String containing the chatbot's response
+            Whatever the bot decides to say back
         """
         try:
-            # Update user profile if new info is provided
+            # Update profile if we got new info - but only once! 
             if user_info and not self.user_profile:
                 self.update_user_profile(user_info)
             
-            # Generate response through the chatbot service
+            # This is where the magic happens... *fingers crossed*
             response = self.chatbot_service.get_response(user_input, emotion, confidence)
             
+            # Ugh, sometimes we get nothing back 😫
             if not response:
                 logger.warning("Empty response from chatbot service")
                 return "I'm sorry, I couldn't generate a response. Could you please try again?"
@@ -135,16 +135,18 @@ class TherapeuticBot:
             return "I apologize, but I'm having trouble processing your request right now. Please try again in a moment."
             
     def _get_brain_activity_description(self, emotion: str) -> str:
-        """Get a user-friendly description of brain activity based on emotion."""
+        """Turns technical EEG stuff into words normal people understand"""
+        # people LOVE when we talk about their brain waves! makes it feel scientific
         if emotion.lower() == 'relaxed':
             return "Showing increased alpha waves, indicating a calm and focused state"
         elif emotion.lower() == 'stressed':
             return "Showing elevated beta activity, suggesting heightened alertness or tension"
         else:
-            return "Showing typical patterns within normal ranges"
+            return "Showing typical patterns within normal ranges"  # idk, just say something neutral
             
     def _get_fallback_response(self, emotion: str) -> str:
-        """Get a contextual fallback response based on the current emotion."""
+        """If all else fails, grab one of these pre-written responses"""
+        # TODO: add more responses for different emotions - these are getting stale
         fallback_responses = {
             'stressed': [
                 "Hey there! I notice your brainwaves are indicating some stress. Would you like to try a quick breathing exercise together?",
@@ -163,19 +165,22 @@ class TherapeuticBot:
             ]
         }
         
+        # pick a random one so it's not boring - nobody likes repetitive bots!
         responses = fallback_responses.get(emotion.lower(), fallback_responses['default'])
         return random.choice(responses)
             
     def _enhance_system_prompt(self, emotion: str) -> str:
-        """Enhance system prompt based on current emotion."""
-        # Ensure the base prompt includes female voice reference
+        """Makes the system prompt match the user's current emotion - super important!"""
+
         base_prompt = self.system_prompt
+        # FIXME: sometimes female identity isn't coming through clearly enough
         if "female" not in base_prompt.lower():
             base_prompt = base_prompt.replace(
                 "You are NeuroSri,", 
                 "You are NeuroSri, a female AI counselor with a nurturing, feminine voice,"
             )
             
+        # different emotions need different approaches - this is the secret sauce!
         emotion_specific_guidance = {
             'stressed': "Focus on calming techniques and stress relief strategies. Use a gentle, reassuring, nurturing feminine tone. Provide specific relaxation exercises.",
             'sad': "Offer emotional support and validation with a warm, compassionate feminine voice. Help explore and process feelings with empathy. Suggest mood-lifting activities when appropriate.",
@@ -185,6 +190,7 @@ class TherapeuticBot:
             'neutral': "Focus on open exploration and general well-being with a warm, inviting feminine tone. Help identify any underlying emotions or thoughts."
         }
         
+        # glue it all together - this makes a HUGE difference in quality!
         enhanced_prompt = (
             base_prompt + 
             "\n\nCurrent emotional context: " + 
@@ -199,10 +205,11 @@ class TherapeuticBot:
         return enhanced_prompt
             
     def clear_history(self):
-        """Clear the conversation history."""
+        """Wipes the conversation clean - good for testing or starting over"""
+        # sometimes you just need a fresh start, ya know?
         self.conversation_history = []
         self.last_emotion = None
         
     def get_conversation_history(self) -> list:
-        """Get the current conversation history."""
+        """Just returns the current conversation - handy for saving or analyzing"""
         return self.conversation_history 

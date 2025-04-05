@@ -17,7 +17,7 @@ export default function MentalHealthChatbot() {
   const [isDownloading, setIsDownloading] = useState(false)
   const ws = useRef<WebSocket | null>(null)
 
-  // Connect to WebSocket for emotion updates
+  // connect to WebSocket for emotion updates - this is where the magic happens!
   useEffect(() => {
     if (typeof window !== 'undefined') {  // Check if we're in the browser
       ws.current = new WebSocket('ws://localhost:5000/ws/emotions')
@@ -35,6 +35,7 @@ export default function MentalHealthChatbot() {
         console.error('WebSocket error:', error)
       }
 
+      // cleanup when component unmounts - we don't want memory leaks!
       return () => {
         ws.current?.close()
       }
@@ -45,7 +46,7 @@ export default function MentalHealthChatbot() {
     e.preventDefault()
     if (!input.trim()) return
 
-    // Add user message
+    // Add user message to the chat - show it immediately for better UX
     const userMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -55,7 +56,7 @@ export default function MentalHealthChatbot() {
     setInput("")
 
     try {
-      // Send message to backend
+      // fire off the message to our backend - fingers crossed it works!
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -66,7 +67,7 @@ export default function MentalHealthChatbot() {
       
       const data = await response.json()
       
-      // Add bot response
+      // got a response from the bot - let's add it to the chat
       const botMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -75,6 +76,7 @@ export default function MentalHealthChatbot() {
       setMessages(prev => [...prev, botMessage])
     } catch (error) {
       console.error('Error sending message:', error)
+      // Something went wrong - let the user know
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'system',
@@ -89,9 +91,11 @@ export default function MentalHealthChatbot() {
       return
     }
 
+    // show loading state while we wait for the download
     setIsDownloading(true)
 
     try {
+      // call our fancy new API endpoint for downloading chats
       const response = await fetch('/api/chat/download', {
         method: 'POST',
         headers: {
@@ -103,7 +107,7 @@ export default function MentalHealthChatbot() {
       const data = await response.json()
       
       if (data.success && data.data && data.data.url) {
-        // Open download URL in a new tab
+        // sweet! we got a URL - open it in a new tab
         window.open(data.data.url, '_blank')
       } else {
         alert(`Failed to download chat history: ${data.error || 'Unknown error'}`)
@@ -112,13 +116,14 @@ export default function MentalHealthChatbot() {
       console.error('Error downloading chat history:', error)
       alert('Error downloading chat history. Please try again.')
     } finally {
+      // always reset the loading state, even if there was an error
       setIsDownloading(false)
     }
   }
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-background text-foreground">
-      {/* Chat Interface */}
+      {/* Chat Interface - this is where the conversation happens */}
       <div className="w-full md:w-1/2 p-4">
         <Card className="h-full border-border bg-card">
           <CardHeader className="border-b border-border">
@@ -168,7 +173,7 @@ export default function MentalHealthChatbot() {
         </Card>
       </div>
 
-      {/* EEG and Emotion Display */}
+      {/* EEG and Emotion Display - the brain activity visualization */}
       <div className="w-full md:w-1/2 p-4">
         <Card className="h-full border-border bg-card">
           <CardHeader className="border-b border-border">

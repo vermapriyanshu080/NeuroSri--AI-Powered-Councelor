@@ -1,3 +1,4 @@
+#importing libraries
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import logging
@@ -15,11 +16,11 @@ from pathlib import Path
 from src.chatbot.chatbot_service import ChatbotService
 import werkzeug.serving
 
-# Add project root to path
+#implementing backend
 project_root = str(Path(__file__).resolve().parent)
 sys.path.append(project_root)
 
-# Configure logging
+#log in page
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -29,25 +30,20 @@ logging.basicConfig(
     ]
 )
 
-# Create logger
+# creating a logger
 logger = logging.getLogger(__name__)
-
-# Create a dedicated user data logger
 user_data_logger = logging.getLogger('user_data')
 user_data_logger.setLevel(logging.INFO)
 
-# Create handler with custom formatting for user data
 user_data_file_handler = logging.FileHandler('user_data.log')
 user_data_formatter = logging.Formatter('%(asctime)s - %(message)s')
 user_data_file_handler.setFormatter(user_data_formatter)
 user_data_logger.addHandler(user_data_file_handler)
 
-# Add a console handler for user data with colored output
 user_data_console_handler = logging.StreamHandler()
 user_data_console_handler.setFormatter(user_data_formatter)
 user_data_logger.addHandler(user_data_console_handler)
 
-# Create a dedicated chat logger
 chat_logger = logging.getLogger('chat_data')
 chat_logger.setLevel(logging.INFO)
 
@@ -57,25 +53,20 @@ chat_formatter = logging.Formatter('%(asctime)s - %(message)s')
 chat_file_handler.setFormatter(chat_formatter)
 chat_logger.addHandler(chat_file_handler)
 
-# Add a console handler for chat data
 chat_console_handler = logging.StreamHandler()
 chat_console_handler.setFormatter(chat_formatter)
 chat_logger.addHandler(chat_console_handler)
 
-# Create a filter for logs
+
 class LogFilter(logging.Filter):
     def filter(self, record):
-        # Skip the following logs:
-        # 1. GET /api/emotion endpoint logs
-        # 2. 127.0.0.1 access logs
-        # 3. Regular prediction logs
+        
         return not (
             'GET /api/emotion' in str(record.msg) or
             '127.0.0.1' in str(record.msg) or
             ('Prediction:' in str(record.msg) and 'Confidence:' in str(record.msg))
         )
 
-# Apply filter to both werkzeug and our logger
 logging.getLogger('werkzeug').addFilter(LogFilter())
 logger.addFilter(LogFilter())
 
@@ -493,16 +484,16 @@ def download_chat_history():
 def get_initial_message():
     """API endpoint to get the initial setup message"""
     try:
-        # Ensure chatbot is initialized
+        # chatbot initilisation
         if chatbot is None:
             initialize_chatbot()
         
-        # Get current emotion state
+        #current state 
         with prediction_lock:
             current_emotion = last_prediction["emotion"]
             confidence = last_prediction["confidence"]
         
-        # Get appropriate message based on state
+        # Getting message
         if not chatbot.setup_complete:
             response = chatbot.get_setup_message()
         elif not chatbot.has_started_conversation and current_emotion != "neutral":
@@ -528,6 +519,7 @@ def get_initial_message():
             'setup_complete': False
         }), 500
 
+#cleaning
 def cleanup():
     """Cleanup function to terminate CHORDS process"""
     global chords_process
@@ -545,18 +537,18 @@ if __name__ == '__main__':
         # Initialize chatbot
         initialize_chatbot()
         
-        # Start CHORDS stream
+        # start chords 
         start_chords_stream()
         
-        # Start EEG stream in background thread
+        #EEG stream
         eeg_thread = threading.Thread(target=eeg_stream_worker, daemon=True)
         eeg_thread.start()
         
-        # Start prediction worker in background thread
+        #prediction
         prediction_thread = threading.Thread(target=prediction_worker, daemon=True)
         prediction_thread.start()
         
-        # Run Flask server
+        #Flask server
         app.run(host='0.0.0.0', port=5000)
         
     finally:
