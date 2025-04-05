@@ -4,7 +4,8 @@
 
 NeuroSri is a cutting-edge AI mental health assistant that integrates real-time EEG (electroencephalogram) data with advanced natural language processing to deliver personalized therapeutic interactions. The system monitors brain activity to assess a user's emotional state and tailors therapeutic responses accordingly, creating a more emotionally intelligent AI counseling experience.
 
-![NeuroSri Interface](https://via.placeholder.com/800x400?text=NeuroSri+Interface)
+![NeuroSri Interface](https://github.com/user-attachments/assets/53559991-9800-4217-baa9-f8c2abea47d5)
+
 
 ## ✨ Key Features
 
